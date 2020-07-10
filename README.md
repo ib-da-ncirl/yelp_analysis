@@ -1,6 +1,11 @@
 # yelp_analysis
 
 ## etl.py
+### Installation
+Install dependencies via
+
+    pip install -r requirements.txt
+    
 ### Usage
     usage: etl.py [-h] [-d DIR] (-b BIZ | -bi BIZ_IDS) [-r REVIEW] [-t TIPS]
                   [-ci CHKIN] [-pi PIN] (-c CAT | -cl CAT_LIST) [-p PARENT]
@@ -79,7 +84,7 @@ The following examples, assume the directory structure:
 
 ##### Generate categories list
 
-    python -d /path/to -c yelp_dataset/categories.json -oc categories.txt -p restaurant
+    python -d /path/to -c yelp_dataset/categories.json -oc categories.txt -p restaurants
 
 `categories.json` is read, extracting all the sub-categories of `restaurant` and saves them to `/path/to/categories.txt`. 
 

@@ -287,13 +287,14 @@ def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, verbose=False,
         req_rev_df.to_csv(out_path, index=False)
 
 
-def get_reviews(csv_path, id_lst, out_path, verbose):
+def get_reviews(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
     """
     Get the reviews for the specified list of business ids
     :param csv_path: Path to review csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
     :param verbose: Verbose mode flag
+    :param df: DataFrame to use; Df.PANDAS or Df.DASK
     :return:
     """
     filter_by_biz('reviews', csv_path, {
@@ -301,45 +302,48 @@ def get_reviews(csv_path, id_lst, out_path, verbose):
         "funny": object,
         "useful": object,
         "stars": object,
-    }, id_lst, out_path, verbose=verbose, df=Df.DASK)
+    }, id_lst, out_path, verbose=verbose, df=df)
 
 
-def get_tips(csv_path, id_lst, out_path, verbose):
+def get_tips(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
     """
     Get the tips for the specified list of business ids
     :param csv_path: Path to tip csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
     :param verbose: Verbose mode flag
+    :param df: DataFrame to use; Df.PANDAS or Df.DASK
     :return:
     """
     filter_by_biz('tips', csv_path, {
         "compliment_count": object,
-    }, id_lst, out_path, verbose=verbose, df=Df.DASK)
+    }, id_lst, out_path, verbose=verbose, df=df)
 
 
-def get_checkin(csv_path, id_lst, out_path, verbose):
+def get_checkin(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
     """
     Get the checkin for the specified list of business ids
     :param csv_path: Path to checkin csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
     :param verbose: Verbose mode flag
+    :param df: DataFrame to use; Df.PANDAS or Df.DASK
     :return:
     """
-    filter_by_biz('checkins', csv_path, {}, id_lst, out_path, verbose=verbose, df=Df.DASK)
+    filter_by_biz('checkins', csv_path, {}, id_lst, out_path, verbose=verbose, df=df)
 
 
-def get_photos(csv_path, id_lst, out_path, verbose):
+def get_photos(csv_path, id_lst, out_path, verbose=False, df=Df.PANDAS):
     """
     Get the photos for the specified list of business ids
     :param csv_path: Path to checkin csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
     :param verbose: Verbose mode flag
+    :param df: DataFrame to use; Df.PANDAS or Df.DASK
     :return:
     """
-    filter_by_biz('photos', csv_path, {}, id_lst, out_path, verbose=verbose, df=Df.PANDAS)
+    filter_by_biz('photos', csv_path, {}, id_lst, out_path, verbose=verbose, df=df)
 
 
 def file_arg_help(descrip, action=None):
@@ -415,9 +419,10 @@ if __name__ == "__main__":
             default=argparse.SUPPRESS, required=False
         )
     parser.add_argument('-dx', '--drop_regex', help='Regex for business csv columns to drop', type=str, default=None)
-    parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
-
     # TODO add pandas or dask choice in arguments
+    # parser.add_argument('-df', '--dataframe', help="Dataframe to use; 'pandas' or 'dask'",
+    #                     choices=['pandas', 'dask'], required=False)
+    parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
     args = parser.parse_args()
 
@@ -484,19 +489,19 @@ if __name__ == "__main__":
 
     # filter reviews
     if paths['out_review'] is not None:
-        get_reviews(paths['review'], biz_id_lst, paths['out_review'], args.verbose)
+        get_reviews(paths['review'], biz_id_lst, paths['out_review'], verbose=args.verbose)
 
     # filter tips
     if paths['out_tips'] is not None:
-        get_tips(paths['tips'], biz_id_lst, paths['out_tips'], args.verbose)
+        get_tips(paths['tips'], biz_id_lst, paths['out_tips'], verbose=args.verbose, df=Df.PANDAS)
 
     # filter checkin
     if paths['out_chkin'] is not None:
         # TODO handle long lines in raw checkin data
         raise NotImplemented('Currently not supported, raw file requires preprocessing for long lines')
-        #get_checkin(paths['chkin'], biz_id_lst, paths['out_chkin'], args.verbose)
+        #get_checkin(paths['chkin'], biz_id_lst, paths['out_chkin'], verbose=args.verbose)
 
     # filter photo
     if paths['out_photo'] is not None:
         # TODO add filtering for photo label option
-        get_photos(paths['pin'], biz_id_lst, paths['out_photo'], args.verbose)
+        get_photos(paths['pin'], biz_id_lst, paths['out_photo'], verbose=args.verbose)
