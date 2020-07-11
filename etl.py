@@ -36,7 +36,6 @@ import argparse
 from timeit import default_timer as timer
 from enum import Enum
 
-
 MIN_PYTHON = (3, 6)
 if sys.version_info < MIN_PYTHON:
     sys.exit("Python %s.%s or later is required.\n" % MIN_PYTHON)
@@ -241,7 +240,7 @@ def get_business(business_path, category_list, out_path, save_ids_path, drop_col
     return req_biz_id_lst
 
 
-def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, verbose=False, df=Df.PANDAS):
+def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, arg_dict=None):
     """
     Get the entities for the specified list of business ids
     :param entity_name: Name of entity being processed
@@ -249,34 +248,76 @@ def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, verbose=False,
     :param dtype: dtypes for read_csv
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered entities to
-    :param verbose: Verbose mode flag
-    :param df: DataFrame to use; Df.PANDAS or Df.DASK
+    :param arg_dict: keyword arguments
     :return:
     """
     start = timer()
 
+    if arg_dict is None:
+        arg_dict = {}
+    verbose = False if 'verbose' not in arg_dict else arg_dict['verbose']
+    df = Df.PANDAS if 'dataframe' not in arg_dict else arg_dict['dataframe']
+    col = None if 'col' not in arg_dict else arg_dict['col']
+    regex = None if 'regex' not in arg_dict else arg_dict['regex']
+
+    # hash ids for faster comparison
     hash_id_list = []
     for bid in id_lst:
         hash_id_list.append(hash(bid))
 
     print(f"Reading '{csv_path}'")
+    if verbose:
+        print(f"Using {df}")
+
+    parse_args = {
+        'dtype': dtype,
+        'encoding': 'utf-8',
+        'engine': 'python',
+        'quoting': csv.QUOTE_MINIMAL
+    }
     if df == Df.PANDAS:
-        rev_df = pd.read_csv(csv_path, dtype=dtype, encoding='utf-8', engine='python', quoting=csv.QUOTE_MINIMAL)
+        if 'nrows' in arg_dict:
+            parse_args['nrows'] = arg_dict['nrows']
+        rev_df = pd.read_csv(csv_path, **parse_args)
     elif df == Df.DASK:
-        rev_df = dd.read_csv(csv_path, dtype=dtype, encoding='utf-8', engine='python', quoting=csv.QUOTE_MINIMAL)
+        if 'nrows' in arg_dict:
+            warning("-nr/--nrows not supported for Dask dataframe")
+        rev_df = dd.read_csv(csv_path, **parse_args)
     else:
         raise NotImplemented(f'Unrecognised dataframe type: {df}')
 
     print(f"{len(rev_df)} {entity_name} loaded")
-    print(f"Filtering for {entity_name} of required {len(id_lst)} businesses")
 
+    # filter by column value
+    if col is not None and regex is not None:
+        if col not in rev_df.columns:
+            error(f"Column '{col}' not in dataframe")
+
+        col_cmt = f" with matching '{col}' column"
+        def col_val_fxn(mcol): return re.search(regex, mcol)
+    else:
+        col_cmt = f""
+        col = 'business_id'     # is ignored
+        def col_val_fxn(mcol): return True
+
+    def filter_by_biz_col(bizid, mcol):
+        return False if not col_val_fxn(mcol) else hash(bizid) in hash_id_list
+
+    print(f"Filtering for {entity_name} of required {len(id_lst)} businesses{col_cmt}")
+
+    # filter by business id
     if df == Df.PANDAS:
-        rev_df['req'] = rev_df['business_id'].apply(lambda lst: hash(lst) in hash_id_list)
+        rev_df['req'] = rev_df[['business_id', col]].apply(lambda biz: (
+            filter_by_biz_col(biz['business_id'], biz[col])
+        ), axis=1)
     elif df == Df.DASK:
-        rev_df['req'] = rev_df['business_id'].apply(lambda lst: hash(lst) in hash_id_list, meta=('business_id', 'str'))
+        rev_df['req'] = rev_df[['business_id', col]].apply(lambda biz: (
+            filter_by_biz_col(biz['business_id'], biz[col])
+        ), axis=1, meta=('req', 'bool'))
 
     # get just the required businesses
     req_rev_df = rev_df[rev_df['req']]
+    # drop work column
     req_rev_df = req_rev_df.drop(['req'], axis=1)
 
     print(f"{len(req_rev_df)} {entity_name} identified")
@@ -287,14 +328,13 @@ def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, verbose=False,
         req_rev_df.to_csv(out_path, index=False)
 
 
-def get_reviews(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
+def get_reviews(csv_path, id_lst, out_path, arg_dict=None):
     """
     Get the reviews for the specified list of business ids
     :param csv_path: Path to review csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
-    :param verbose: Verbose mode flag
-    :param df: DataFrame to use; Df.PANDAS or Df.DASK
+    :param arg_dict: keyword arguments
     :return:
     """
     filter_by_biz('reviews', csv_path, {
@@ -302,48 +342,45 @@ def get_reviews(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
         "funny": object,
         "useful": object,
         "stars": object,
-    }, id_lst, out_path, verbose=verbose, df=df)
+    }, id_lst, out_path, arg_dict=arg_dict)
 
 
-def get_tips(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
+def get_tips(csv_path, id_lst, out_path, arg_dict=None):
     """
     Get the tips for the specified list of business ids
     :param csv_path: Path to tip csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
-    :param verbose: Verbose mode flag
-    :param df: DataFrame to use; Df.PANDAS or Df.DASK
+    :param arg_dict: keyword arguments
     :return:
     """
     filter_by_biz('tips', csv_path, {
         "compliment_count": object,
-    }, id_lst, out_path, verbose=verbose, df=df)
+    }, id_lst, out_path, arg_dict=arg_dict)
 
 
-def get_checkin(csv_path, id_lst, out_path, verbose=False, df=Df.DASK):
+def get_checkin(csv_path, id_lst, out_path, arg_dict=None):
     """
     Get the checkin for the specified list of business ids
     :param csv_path: Path to checkin csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
-    :param verbose: Verbose mode flag
-    :param df: DataFrame to use; Df.PANDAS or Df.DASK
+    :param arg_dict: keyword arguments
     :return:
     """
-    filter_by_biz('checkins', csv_path, {}, id_lst, out_path, verbose=verbose, df=df)
+    filter_by_biz('checkins', csv_path, {}, id_lst, out_path, arg_dict=arg_dict)
 
 
-def get_photos(csv_path, id_lst, out_path, verbose=False, df=Df.PANDAS):
+def get_photos(csv_path, id_lst, out_path, arg_dict=None):
     """
     Get the photos for the specified list of business ids
     :param csv_path: Path to checkin csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
-    :param verbose: Verbose mode flag
-    :param df: DataFrame to use; Df.PANDAS or Df.DASK
+    :param arg_dict: keyword arguments
     :return:
     """
-    filter_by_biz('photos', csv_path, {}, id_lst, out_path, verbose=verbose, df=df)
+    filter_by_biz('photos', csv_path, {}, id_lst, out_path, arg_dict=arg_dict)
 
 
 def file_arg_help(descrip, action=None):
@@ -358,15 +395,23 @@ def warning(msg):
     print(f"Warning: {msg}")
 
 
+def error(msg):
+    sys.exit(f"Error: {msg}")
+
+
 def ignore_arg_warning(args_namespace, arg_lst):
     for arg in arg_lst:
         if arg in args_namespace:
             warning(f"Ignoring '{arg}' argument")
 
 
-def required_arg_error(arg_parser, req_arg):
+def arg_error(arg_parser, msg):
     arg_parser.print_usage()
-    sys.exit(f"{os.path.split(sys.argv[0])[1]}: error one of the arguments {req_arg} is required")
+    sys.exit(msg)
+
+
+def required_arg_error(arg_parser, req_arg):
+    arg_error(arg_parser, f"{os.path.split(sys.argv[0])[1]}: error one of the arguments {req_arg} is required")
 
 
 if __name__ == "__main__":
@@ -419,9 +464,12 @@ if __name__ == "__main__":
             default=argparse.SUPPRESS, required=False
         )
     parser.add_argument('-dx', '--drop_regex', help='Regex for business csv columns to drop', type=str, default=None)
-    # TODO add pandas or dask choice in arguments
-    # parser.add_argument('-df', '--dataframe', help="Dataframe to use; 'pandas' or 'dask'",
-    #                     choices=['pandas', 'dask'], required=False)
+    parser.add_argument('-mx', '--match_regex', help='Regex for business csv columns to match; column name=regex',
+                        type=str, default=argparse.SUPPRESS)
+    parser.add_argument('-df', '--dataframe', help="Dataframe to use; 'pandas' or 'dask'",
+                        choices=['pandas', 'dask'], required=False)
+    parser.add_argument('-nr', '--nrows', help="Number of rows to read, (Note: ignored with '-df=dask' option)",
+                        type=int, default=argparse.SUPPRESS)
     parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
     args = parser.parse_args()
@@ -487,21 +535,35 @@ if __name__ == "__main__":
             else:
                 break
 
+    kwarg_dict = {'verbose': args.verbose}
+    if args.dataframe is not None:
+        kwarg_dict['dataframe'] = Df.PANDAS if args.dataframe == 'pandas' else Df.DASK
+    if 'nrows' in args:
+        kwarg_dict['nrows'] = args.nrows
+    if 'match_regex' in args:
+        splits = args.match_regex.split('=')
+        if len(splits) != 2:
+            arg_error(parser, f"Invalid format for -mx/--match_regex")
+
+        kwarg_dict['col'] = splits[0]
+        kwarg_dict['regex'] = splits[1]
+
     # filter reviews
     if paths['out_review'] is not None:
-        get_reviews(paths['review'], biz_id_lst, paths['out_review'], verbose=args.verbose)
+        if 'df' not in kwarg_dict:
+            kwarg_dict['df'] = Df.DASK
+        get_reviews(paths['review'], biz_id_lst, paths['out_review'], arg_dict=kwarg_dict)
 
     # filter tips
     if paths['out_tips'] is not None:
-        get_tips(paths['tips'], biz_id_lst, paths['out_tips'], verbose=args.verbose, df=Df.PANDAS)
+        get_tips(paths['tips'], biz_id_lst, paths['out_tips'], arg_dict=kwarg_dict)
 
     # filter checkin
     if paths['out_chkin'] is not None:
         # TODO handle long lines in raw checkin data
         raise NotImplemented('Currently not supported, raw file requires preprocessing for long lines')
-        #get_checkin(paths['chkin'], biz_id_lst, paths['out_chkin'], verbose=args.verbose)
+        # get_checkin(paths['chkin'], biz_id_lst, paths['out_chkin'], arg_dict=kwarg_dict)
 
     # filter photo
     if paths['out_photo'] is not None:
-        # TODO add filtering for photo label option
-        get_photos(paths['pin'], biz_id_lst, paths['out_photo'], verbose=args.verbose)
+        get_photos(paths['pin'], biz_id_lst, paths['out_photo'], arg_dict=kwarg_dict)

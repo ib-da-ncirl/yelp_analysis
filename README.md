@@ -7,11 +7,12 @@ Install dependencies via
     pip install -r requirements.txt
     
 ### Usage
-    usage: etl.py [-h] [-d DIR] (-b BIZ | -bi BIZ_IDS) [-r REVIEW] [-t TIPS]
-                  [-ci CHKIN] [-pi PIN] (-c CAT | -cl CAT_LIST) [-p PARENT]
+    usage: etl.py [-h] [-d DIR] [-b BIZ | -bi BIZ_IDS] [-r REVIEW] [-t TIPS]
+                  [-ci CHKIN] [-pi PIN] [-c CAT | -cl CAT_LIST] [-p PARENT]
                   [-e EXCLUDE] [-ob OUT_BIZ] [-or OUT_REVIEW] [-ot OUT_TIPS]
                   [-oci OUT_CHKIN] [-op OUT_PHOTO] [-oc OUT_CAT] [-obi OUT_BIZ_ID]
-                  [-v]
+                  [-dx DROP_REGEX] [-mx MATCH_REGEX] [-df {pandas,dask}]
+                  [-nr NROWS] [-v]
     
     Perform ETL on the Yelp Dataset CSV data to extract the subset of
     businesses/reviews etc. based on a parent category
@@ -67,8 +68,15 @@ Install dependencies via
                             relative to 'root directory' if argument supplied
       -dx DROP_REGEX, --drop_regex DROP_REGEX
                             Regex for business csv columns to drop
+      -mx MATCH_REGEX, --match_regex MATCH_REGEX
+                            Regex for business csv columns to match; column
+                            name=regex
+      -df {pandas,dask}, --dataframe {pandas,dask}
+                            Dataframe to use; 'pandas' or 'dask'
+      -nr NROWS, --nrows NROWS
+                            Number of rows to read, (Note: ignored with '-df=dask'
+                            option)
       -v, --verbose         Verbose mode
-
 
 #### Example command lines
 
@@ -128,6 +136,12 @@ The list of business ids will be read from `business_ids.txt`, and the contents 
     python -d /path/to -bi business_ids.txt -pi yelp_photos/photos.csv -op biz_photos.csv
 
 The list of business ids will be read from `business_ids.txt`, and the contents of `photos.csv` are filtered to exclude photos for businesses not in the id list. The remaining photos will be saved to `/path/to/biz_photos.csv`.
+
+##### Generate csv file of photos for specified business ids with label 'food' 
+
+    python -d /path/to -bi business_ids.txt -pi yelp_photos/photos.csv -op food_photos.csv -mx label=food
+
+The list of business ids will be read from `business_ids.txt`, and the contents of `photos.csv` are filtered to exclude photos for businesses not in the id list, and of those photos only photos labeled `food` are allowed. The remaining photos will be saved to `/path/to/food_photos.csv`.
 
 ##### Generate csv file of checkins for specified business ids
 
