@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #  The MIT License (MIT)
 #  Copyright (c) 2020. Ian Buttimer
 #
@@ -35,6 +36,7 @@ import dask.dataframe as dd
 import argparse
 from timeit import default_timer as timer
 from enum import Enum
+from PIL import Image
 
 MIN_PYTHON = (3, 6)
 if sys.version_info < MIN_PYTHON:
@@ -83,6 +85,21 @@ def check_parent(parent, alias, parent_aliases, exclude_lst):
     if candidate:
         candidate = (alias not in exclude_lst)
     return candidate
+
+
+def verify_path(path, typ='file'):
+    exists = os.path.exists(path)
+    if typ == 'folder':
+        valid = os.path.isdir(path)
+    elif typ == 'file':
+        valid = os.path.isfile(path)
+    else:
+        raise ValueError(f"Unreckonised 'typ' argument: {typ}")
+    if not exists:
+        error(f"'{path}' does not exist")
+    if not valid:
+        error(f"'{path}' is not a {typ}")
+    return exists and valid
 
 
 def get_categories(category_path, parent_category, exclude_str, save_cats_path, verbose):
@@ -142,11 +159,12 @@ def check_categories(categories_str, category_list):
     :return:
     """
     req = False
-    categories = categories_str.split(',')
-    for category in categories:
-        req = category.strip() in category_list
-        if req:
-            break
+    if isinstance(categories_str, str):
+        categories = categories_str.split(',')
+        for category in categories:
+            req = category.strip() in category_list
+            if req:
+                break
     return req
 
 
@@ -155,100 +173,45 @@ def duration(start, verbose):
         print(f"Duration: {timer() - start:.1f}s")
 
 
-def get_business(business_path, category_list, out_path, save_ids_path, drop_cols=None, verbose=False):
+def save_csv(df, out_path, index=False):
     """
-    Process the businesses csv file to get a list of businesses with the specified categories
-    :param business_path: Path to business csv file
-    :param category_list: List of categories to match
-    :param out_path: File to save filtered businesses to
-    :param save_ids_path: File to save business id list to
-    :param drop_cols: Regex for columns to drop
-    :param verbose: Verbose mode flag
-    :return:  Business id list
+    Save a Dataframe to csv
+    :param df: Dataframe to save
+    :param out_path: Path to save to
+    :param index: Write row names (index)
+    :return:
     """
-    start = timer()
-
-    # read business details
-    # - DtypeWarning: Columns (36,37,41,43,46,56,67,72,76,80,99) have mixed types
-    #   most of the columns have bool mixed with missing values so use a converter to preserve the missing value
-    #   for the moment
-    def bool_or_none(x):
-        return bool(x) if x else None
-
-    biz_df = pd.read_csv(business_path, dtype={
-        "attributes.AgesAllowed": str,  # 36
-        "attributes.DietaryRestrictions": str,  # 41
-    }, converters={
-        "attributes.DietaryRestrictions.gluten-free": bool_or_none,  # 37
-        "attributes.DietaryRestrictions.vegan": bool_or_none,  # 43
-        "attributes.DietaryRestrictions.dairy-free": bool_or_none,  # 46
-        "attributes.DietaryRestrictions.halal": bool_or_none,  # 56
-        "attributes.DietaryRestrictions.soy-free": bool_or_none,  # 67
-        "attributes.DietaryRestrictions.vegetarian": bool_or_none,  # 72
-        "attributes.RestaurantsCounterService": bool_or_none,  # 76
-        "attributes.DietaryRestrictions.kosher": bool_or_none,  # 80
-        "attributes.Open24Hours": bool_or_none,  # 99
-    })
-
-    # find root columns which are not required as values have been expanded into their own columns
-    # e.g. 'hours' is not required as info is in 'hours.Friday' etc.
-    # also any columns matching the drop column regex
-    col_to_drop = set()
-    for col in biz_df.columns.values:
-        if "." in col:
-            splits = col.split(".")
-            col_name = splits[0]
-            col_to_drop.add(col_name)
-            for col_idx in range(1, len(splits) - 1):
-                col_name = col_name + '.' + splits[col_idx]
-                col_to_drop.add(col_name)
-
-        if drop_cols is not None:
-            if re.search(drop_cols, col):
-                col_to_drop.add(col)
-
-    if len(col_to_drop) > 0:
-        print(f'Dropping {len(col_to_drop)} unnecessary columns')
-        print(f'{col_to_drop}')
-        biz_df = biz_df.drop(list(col_to_drop), axis=1)
-
-    biz_df = biz_df.fillna('')
-
-    print(f"{len(biz_df)} businesses loaded")
-    print(f"Filtering for businesses of required {len(category_list)} categories")
-
-    # 'categories' column is a string containing a comma separated list of categories
-    biz_df['req'] = biz_df['categories'].apply(lambda lst: check_categories(lst, category_list))
-
-    # get just the required businesses
-    req_biz_df = biz_df[biz_df['req']]
-
-    req_biz_df = req_biz_df.drop(['req'], axis=1)
-
-    req_biz_id_lst = req_biz_df['business_id'].to_list()
-
-    print(f"{len(req_biz_df)} businesses identified")
-    duration(start, verbose)
-
     if out_path is not None:
-        print(f"Saving to '{out_path}'")
-        req_biz_df.to_csv(out_path, index=False)
-
-    if save_ids_path is not None:
-        save_list(save_ids_path, req_biz_id_lst)
-
-    return req_biz_id_lst
+        print(f"Saving {len(df)} rows to '{out_path}'")
+        df.to_csv(out_path, index=index)
 
 
-def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, arg_dict=None):
+def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
+             filter_id_column=None, filter_id_lst=None,
+             filter_lambda_column=None, filter_lambda=None,
+             entity_id_column=None,
+             arg_dict=None, csv_id=None):
     """
     Get the entities for the specified list of business ids
     :param entity_name: Name of entity being processed
     :param csv_path: Path to entity csv file
     :param dtype: dtypes for read_csv
-    :param id_lst:  List of business ids
+    :param converters: converters for read_csv
     :param out_path: Path to save filtered entities to
+    :param filter_id_column: Name of id column to filter by
+    :param filter_id_lst:  List of ids to filter by
+    :param filter_lambda_column:  Name of column to apply lambda filter to
+    :param filter_lambda:   lambda filter function
+    :param entity_id_column:    Name of id column of the entity
     :param arg_dict: keyword arguments
+                     - 'verbose': verbose mode flag; True/False
+                     - 'dataframe': dataframe type; Df.PANDAS/Df.DASK, default Df.PANDAS
+                     - 'col': name of column to filter on
+                     - 'regex': regex to filter column 'col'
+                     - 'drop_regex': regex for columns to drop
+                     - 'nrows': number of rows to read, (Df.PANDAS only)
+                     - 'show_duration': display duration flag in verbose mode; True/False
+    :param csv_id: cvs_id of arg_dict['regex'] to use for column matching
     :return:
     """
     start = timer()
@@ -257,13 +220,30 @@ def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, arg_dict=None)
         arg_dict = {}
     verbose = False if 'verbose' not in arg_dict else arg_dict['verbose']
     df = Df.PANDAS if 'dataframe' not in arg_dict else arg_dict['dataframe']
-    col = None if 'col' not in arg_dict else arg_dict['col']
-    regex = None if 'regex' not in arg_dict else arg_dict['regex']
+    drop_regex = None if 'drop_regex' not in arg_dict else arg_dict['drop_regex']
+    limit_id = None if 'limit_id' not in arg_dict else arg_dict['limit_id']
+    # exclude id list flag; default False. False: accept all ids in list, True: accept all ids not in list
+    ex_id = False if 'ex_id' not in arg_dict else arg_dict['ex_id']
+    show_duration = True if 'show_duration' not in arg_dict else arg_dict['show_duration']
+
+    col = None
+    regex = None
+    if 'regex' in arg_dict and csv_id is not None:
+        if csv_id in arg_dict['regex']:
+            col = arg_dict['regex'][csv_id][0]
+            regex = arg_dict['regex'][csv_id][1]
 
     # hash ids for faster comparison
-    hash_id_list = []
-    for bid in id_lst:
-        hash_id_list.append(hash(bid))
+    hash_id_list = None
+    if filter_id_lst is not None and filter_id_column is not None:
+        hash_id_list = []
+        for bid in filter_id_lst:
+            hash_id_list.append(hash(bid))
+
+    if limit_id is not None:
+        max_count = limit_id
+    else:
+        max_count = sys.maxsize
 
     print(f"Reading '{csv_path}'")
     if verbose:
@@ -271,6 +251,7 @@ def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, arg_dict=None)
 
     parse_args = {
         'dtype': dtype,
+        'converters': converters,
         'encoding': 'utf-8',
         'engine': 'python',
         'quoting': csv.QUOTE_MINIMAL
@@ -289,43 +270,186 @@ def filter_by_biz(entity_name, csv_path, dtype, id_lst, out_path, arg_dict=None)
     print(f"{len(rev_df)} {entity_name} loaded")
 
     # filter by column value
+    cmts = []
     if col is not None and regex is not None:
         if col not in rev_df.columns:
             error(f"Column '{col}' not in dataframe")
 
-        col_cmt = f" with matching '{col}' column"
-        def col_val_fxn(mcol): return re.search(regex, mcol)
+        cmts.append(f"'{col}' column")
+
+        def col_val_fxn(mcol):
+            return re.search(regex, mcol)
     else:
-        col_cmt = f""
-        col = 'business_id'     # is ignored
-        def col_val_fxn(mcol): return True
+        def col_val_fxn(mcol):
+            return True
 
-    def filter_by_biz_col(bizid, mcol):
-        return False if not col_val_fxn(mcol) else hash(bizid) in hash_id_list
+    if filter_lambda is not None:
+        cmts.append(f"'{filter_lambda_column}' column")
+    if hash_id_list is not None:
+        cmts.append(f"'{filter_id_column}' column, {len(hash_id_list)} possible values")
 
-    print(f"Filtering for {entity_name} of required {len(id_lst)} businesses{col_cmt}")
+    count = 0
+    total = len(rev_df)
+    if df != Df.DASK:
+        def inc_progress():
+            nonlocal count
+            count = progress("Row", total, count)
+    else:
+        def inc_progress():
+            nonlocal count
+            count += 1
 
-    # filter by business id
+    def filter_by_id_and_col(filter_props):
+        if filter_lambda_column is not None and filter_lambda is not None:
+            # filter on lambda function
+            ok = filter_lambda(filter_props[filter_lambda_column])
+        else:
+            ok = True
+        if ok:
+            # filter on column value
+            ok = col_val_fxn(None if col is None else filter_props[col])
+        if ok:
+            if hash_id_list is not None:
+                # filter on ids
+                ok = hash(filter_props[filter_id_column]) in hash_id_list
+            if ex_id:
+                ok = not ok  # exclude id
+        nonlocal max_count
+        if ok and max_count > 0:
+            max_count -= 1
+        else:
+            ok = False
+        inc_progress()
+        return ok
+
+    cmt = f"Filtering for required {entity_name}"
+    for cnd in cmts:
+        cmt += f"\n- matching {cnd}"
+    if max_count < sys.maxsize:
+        cmt += f"\n- max count {max_count}"
+    print(cmt)
+
+    # filter by ids
+    filter_col_list = [filter_id_column, col] if col is not None else [filter_id_column]
+    if filter_lambda_column is not None and filter_lambda is not None:
+        filter_col_list.append(filter_lambda_column)
     if df == Df.PANDAS:
-        rev_df['req'] = rev_df[['business_id', col]].apply(lambda biz: (
-            filter_by_biz_col(biz['business_id'], biz[col])
-        ), axis=1)
+        rev_df['req'] = rev_df[filter_col_list].apply(filter_by_id_and_col, axis=1)
     elif df == Df.DASK:
-        rev_df['req'] = rev_df[['business_id', col]].apply(lambda biz: (
-            filter_by_biz_col(biz['business_id'], biz[col])
-        ), axis=1, meta=('req', 'bool'))
+        rev_df['req'] = rev_df[filter_col_list].apply(filter_by_id_and_col, axis=1, meta=('req', 'bool'))
+
+    if df != Df.DASK:
+        progress("Row", total, total)
+
+    # drop columns matching the drop column regex
+    if drop_regex is not None:
+        cols_to_drop = set()
+        for dcol in rev_df.columns.values:
+            if re.search(drop_regex, dcol):
+                cols_to_drop.add(dcol)
+
+        if len(cols_to_drop) > 0:
+            print(f'Dropping {len(cols_to_drop)} unnecessary columns')
+            print(f'{cols_to_drop}')
+            rev_df = rev_df.drop(list(cols_to_drop), axis=1)
 
     # get just the required businesses
     req_rev_df = rev_df[rev_df['req']]
     # drop work column
     req_rev_df = req_rev_df.drop(['req'], axis=1)
 
+    if entity_id_column is not None:
+        entity_id_lst = req_rev_df[entity_id_column].to_list()
+    else:
+        entity_id_lst = None
+
     print(f"{len(req_rev_df)} {entity_name} identified")
+
+    save_csv(req_rev_df, out_path, index=False)
+
+    if show_duration:
+        duration(start, verbose)
+
+    return req_rev_df, entity_id_lst, start
+
+
+def get_business(csv_path, category_list=None, out_path=None, save_ids_path=None, id_list=None, arg_dict=None,
+                 csv_id='biz'):
+    """
+    Process the businesses csv file to get a list of businesses with the specified categories
+    :param csv_path: Path to business csv file
+    :param category_list: List of categories to match
+    :param out_path: File to save filtered businesses to
+    :param save_ids_path: File to save business id list to
+    :param id_list: List of business ids
+    :param arg_dict: See load_csv::arg_dict
+    :param csv_id: cvs_id of arg_dict['regex'] to use for column matching
+    :return:  Business id list
+    """
+
+    arg_dict['show_duration'] = False
+    verbose = False if 'verbose' not in arg_dict else arg_dict['verbose']
+
+    # read business details
+    # - DtypeWarning: Columns (36,37,41,43,46,56,67,72,76,80,99) have mixed types
+    #   most of the columns have bool mixed with missing values so use a converter to preserve the missing value
+    #   for the moment
+    def bool_or_none(x):
+        return bool(x) if x else None
+
+    if category_list is not None:
+        def filter_lambda_fxn(lst):
+            return check_categories(lst, category_list)
+
+        filter_lambda = filter_lambda_fxn
+    else:
+        filter_lambda = None
+
+    biz_df, req_biz_id_lst, start = load_csv("businesses", csv_path, dtype={
+        "attributes.AgesAllowed": str,  # 36
+        "attributes.DietaryRestrictions": str,  # 41
+    }, converters={
+        "attributes.DietaryRestrictions.gluten-free": bool_or_none,  # 37
+        "attributes.DietaryRestrictions.vegan": bool_or_none,  # 43
+        "attributes.DietaryRestrictions.dairy-free": bool_or_none,  # 46
+        "attributes.DietaryRestrictions.halal": bool_or_none,  # 56
+        "attributes.DietaryRestrictions.soy-free": bool_or_none,  # 67
+        "attributes.DietaryRestrictions.vegetarian": bool_or_none,  # 72
+        "attributes.RestaurantsCounterService": bool_or_none,  # 76
+        "attributes.DietaryRestrictions.kosher": bool_or_none,  # 80
+        "attributes.Open24Hours": bool_or_none,  # 99
+    }, filter_id_column='business_id', filter_id_lst=id_list,
+                                             filter_lambda_column='categories',
+                                             filter_lambda=filter_lambda,
+                                             entity_id_column='business_id', arg_dict=arg_dict, csv_id=csv_id)
+
+    # find root columns which are not required as values have been expanded into their own columns
+    # e.g. 'hours' is not required as info is in 'hours.Friday' etc.
+    col_to_drop = set()
+    for col in biz_df.columns.values:
+        if "." in col:
+            dot_splits = col.split(".")
+            col_name = dot_splits[0]
+            col_to_drop.add(col_name)
+            for col_idx in range(1, len(dot_splits) - 1):
+                col_name = col_name + '.' + dot_splits[col_idx]
+                col_to_drop.add(col_name)
+
+    if len(col_to_drop) > 0:
+        print(f'Dropping {len(col_to_drop)} unnecessary columns')
+        print(f'{col_to_drop}')
+        biz_df = biz_df.drop(list(col_to_drop), axis=1)
+
+    biz_df = biz_df.fillna('')
+
     duration(start, verbose)
 
-    if out_path is not None:
-        print(f"Saving to '{out_path}'")
-        req_rev_df.to_csv(out_path, index=False)
+    save_csv(biz_df, out_path, index=False)
+
+    if save_ids_path is not None:
+        save_list(save_ids_path, req_biz_id_lst)
+
+    return biz_df, req_biz_id_lst
 
 
 def get_reviews(csv_path, id_lst, out_path, arg_dict=None):
@@ -337,12 +461,12 @@ def get_reviews(csv_path, id_lst, out_path, arg_dict=None):
     :param arg_dict: keyword arguments
     :return:
     """
-    filter_by_biz('reviews', csv_path, {
+    return load_csv('reviews', csv_path, dtype={
         "cool": object,
         "funny": object,
         "useful": object,
         "stars": object,
-    }, id_lst, out_path, arg_dict=arg_dict)
+    }, out_path=out_path, filter_id_column='business_id', filter_id_lst=id_lst, arg_dict=arg_dict, csv_id='review')
 
 
 def get_tips(csv_path, id_lst, out_path, arg_dict=None):
@@ -354,9 +478,9 @@ def get_tips(csv_path, id_lst, out_path, arg_dict=None):
     :param arg_dict: keyword arguments
     :return:
     """
-    filter_by_biz('tips', csv_path, {
+    return load_csv('tips', csv_path, dtype={
         "compliment_count": object,
-    }, id_lst, out_path, arg_dict=arg_dict)
+    }, out_path=out_path, filter_id_column='business_id', filter_id_lst=id_lst, arg_dict=arg_dict, csv_id='tips')
 
 
 def get_checkin(csv_path, id_lst, out_path, arg_dict=None):
@@ -368,7 +492,8 @@ def get_checkin(csv_path, id_lst, out_path, arg_dict=None):
     :param arg_dict: keyword arguments
     :return:
     """
-    filter_by_biz('checkins', csv_path, {}, id_lst, out_path, arg_dict=arg_dict)
+    return load_csv('checkins', csv_path, out_path=out_path, filter_id_column='business_id', filter_id_lst=id_lst,
+                    arg_dict=arg_dict)
 
 
 def get_photos(csv_path, id_lst, out_path, arg_dict=None):
@@ -380,15 +505,95 @@ def get_photos(csv_path, id_lst, out_path, arg_dict=None):
     :param arg_dict: keyword arguments
     :return:
     """
-    filter_by_biz('photos', csv_path, {}, id_lst, out_path, arg_dict=arg_dict)
+    return load_csv('photos', csv_path, out_path=out_path, filter_id_column='business_id', filter_id_lst=id_lst,
+                    arg_dict=arg_dict, csv_id='pin')
 
 
-def file_arg_help(descrip, action=None):
+def progress(cmt, total, current, step=100):
+    current += 1
+    if current % step == 0 or total == current:
+        print(f"{cmt}: {current} ({current*100/total:.1f}%)", flush=True, end='\r' if total > current else '\n')
+    return current
+
+
+def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path, arg_dict=None):
+    """
+    Generate a csv for the photo dataset
+    :param biz_path: Path to business csv file
+    :param photo_csv_path: Path to photo csv file
+    :param id_lst:  List of business ids
+    :param photo_folder: Path to folder containing photos
+    :param out_path: Path to save dataset to
+    :param arg_dict: keyword arguments
+    :return:
+    """
+    biz_df, _ = get_business(biz_path, id_list=id_lst, arg_dict=arg_dict, csv_id='biz_photo')
+    photo_df, _, _ = get_photos(photo_csv_path, id_lst, None, arg_dict=arg_dict)
+
+    print(f"Processing photo details")
+
+    extensions = Image.registered_extensions().keys()
+    count = 0
+
+    def img_attrib(photo):
+        attrib = None
+        for ext in extensions:
+            filename = f"{photo}{ext}"
+            filepath = os.path.join(photo_folder, filename)
+            if os.path.isfile(filepath):
+                im = Image.open(filepath)
+                nonlocal count
+                count = progress("Photo", len(photo_df), count)
+                attrib = f"{filename},{im.format},{im.size[0]},{im.size[1]},{im.mode}"
+                break
+        if attrib is None:
+            raise ValueError(f"Unmatched photo id {photo}")
+        return attrib
+
+    photo_df['photo_attrib'] = photo_df['photo_id'].apply(img_attrib)
+    photo_df[['photo_file', 'format', 'width', 'height', 'mode']] = photo_df.apply(
+                lambda row: pd.Series(row['photo_attrib'].split(',')), axis=1)
+
+    progress("Photo", len(photo_df), len(photo_df))
+
+    # many-to-one join, i.e many photos to one business id
+    biz_photo_df = pd.merge(photo_df, biz_df, on='business_id', how='outer')
+
+    # just keep required columns
+    photo_set_df = biz_photo_df[['business_id', 'stars', 'photo_id', 'photo_file', 'format', 'width', 'height', 'mode']]
+
+    total_rows = len(photo_set_df)
+
+    # drop rows with no photo id, no photo no prediction
+    photo_set_df = photo_set_df.dropna()
+
+    photo_set_df['width'] = photo_set_df['width'].astype('int32')
+    photo_set_df['height'] = photo_set_df['height'].astype('int32')
+
+    if total_rows - len(photo_set_df) > 0:
+        print(f"Dropped {total_rows - len(photo_set_df)} businesses with no photos")
+
+    def wh_anal(column):
+        lwr = column.lower()
+        print(f"{column}: min - {photo_set_df[lwr].min()}px, max - {photo_set_df[lwr].max()}px")
+        print(f"{column}: value counts - {photo_set_df[lwr].value_counts()}")
+
+    unique_vals = photo_set_df['format'].unique()
+    print(f"Format: {len(unique_vals)} format{'' if len(unique_vals) == 1 else 's'} - {unique_vals}")
+    wh_anal("Width")
+    wh_anal("Height")
+    unique_vals = photo_set_df['mode'].unique()
+    print(f"Mode: {len(unique_vals)} mode{'' if len(unique_vals) == 1 else 's'} - {unique_vals}")
+
+    save_csv(photo_set_df, out_path, index=False)
+
+
+def file_arg_help(descrip, target='file', action=None):
     if action is None:
         tail = ';'
     else:
         tail = f' {action};'
-    return f"Path to {descrip} file{tail} absolute or relative to 'root directory' if argument supplied"
+    return f"Path to {descrip} {target}{tail} absolute or relative to 'root directory' if argument supplied"
 
 
 def warning(msg):
@@ -430,7 +635,7 @@ if __name__ == "__main__":
     biz_group = parser.add_mutually_exclusive_group(required=False)
     biz_group.add_argument('-b', '--biz', type=str, help=file_arg_help("business csv"), default='')
     biz_group.add_argument('-bi', '--biz_ids', type=str, help=file_arg_help("business ids"), default='')
-    # review, tips, checkin & photo
+    # review, tips, checkin & photo input csv files
     for arg_tuple in [('-r', '--review', 'review'),
                       ('-t', '--tips', 'tips'),
                       ('-ci', '--chkin', 'checkin'),
@@ -457,6 +662,15 @@ if __name__ == "__main__":
             arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} csv"),
             default=argparse.SUPPRESS, required=False
         )
+    parser.add_argument('-bp', '--biz_photo', type=str, help=file_arg_help("business csv for photo dataset"),
+                        default='')     # just so as not to conflict with mutually exclusive --biz/--biz_ids arguments
+    parser.add_argument('-pf', '--photo_folder', type=str, help=file_arg_help("photo", target='folder'),
+                        default='')
+    for arg_tuple in [('-ops', '--out_photo_set', 'photo set')]:
+        parser.add_argument(
+            arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} folder"),
+            default=argparse.SUPPRESS, required=False
+        )
     for arg_tuple in [('-oc', '--out_cat', 'category list'),
                       ('-obi', '--out_biz_id', 'business ids')]:
         parser.add_argument(
@@ -464,26 +678,39 @@ if __name__ == "__main__":
             default=argparse.SUPPRESS, required=False
         )
     parser.add_argument('-dx', '--drop_regex', help='Regex for business csv columns to drop', type=str, default=None)
-    parser.add_argument('-mx', '--match_regex', help='Regex for business csv columns to match; column name=regex',
-                        type=str, default=argparse.SUPPRESS)
+    parser.add_argument('-mx', '--match_regex', help="Regex for csv columns to match; 'csv_id:column_name=regex'. "
+                                                     "Valid 'csv_id' are; 'biz'=business csv file, "
+                                                     "'pin'=photo csv file, 'tip'=tip csv file and "
+                                                     "'review'=review csv file",
+                        type=str, default=argparse.SUPPRESS, nargs='+')
     parser.add_argument('-df', '--dataframe', help="Dataframe to use; 'pandas' or 'dask'",
                         choices=['pandas', 'dask'], required=False)
     parser.add_argument('-nr', '--nrows', help="Number of rows to read, (Note: ignored with '-df=dask' option)",
+                        type=int, default=argparse.SUPPRESS)
+    parser.add_argument('-li', '--limit_id', help="Limit number of business ids to read",
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
     args = parser.parse_args()
 
+    if len(sys.argv) == 1:
+        # display help message when no args are passed.
+        parser.print_help()
+        sys.exit(1)
+
     if args.verbose:
         print(f"Arguments: {args}")
 
-    paths = {'biz': None, 'biz_ids': None,
+    paths = {'biz': None, 'biz_ids': None, 'biz_photo': None, 'photo_folder': None,
              'cat': None, 'cat_list': None,
              'review': None, 'tips': None, 'chkin': None, 'pin': None,
              'out_biz': None, 'out_review': None, 'out_tips': None, 'out_chkin': None, 'out_photo': None,
+             'out_photo_set': None,
              'out_cat': None, 'out_biz_id': None}
-    for arg_tuple in [('biz', args.biz), ('biz_ids', args.biz_ids),
-                      ('cat', args.cat), ('cat_list', args.cat_list)]:
+    ip_arg_tuples = [('biz', args.biz, 'file'), ('biz_ids', args.biz_ids, 'file'),
+                     ('biz_photo', args.biz_photo, 'file'), ('photo_folder', args.photo_folder, 'folder'),
+                     ('cat', args.cat, 'file'), ('cat_list', args.cat_list, 'file')]
+    for arg_tuple in ip_arg_tuples:
         if arg_tuple[0] in args:
             paths[arg_tuple[0]] = arg_tuple[1]
     for arg_tuple in [('review', args.review),
@@ -497,6 +724,7 @@ if __name__ == "__main__":
                       ('out_tips', None if 'out_tips' not in args else args.out_tips),
                       ('out_chkin', None if 'out_chkin' not in args else args.out_chkin),
                       ('out_photo', None if 'out_photo' not in args else args.out_photo),
+                      ('out_photo_set', None if 'out_photo_set' not in args else args.out_photo_set),
                       ('out_cat', None if 'out_cat' not in args else args.out_cat),
                       ('out_biz_id', None if 'out_biz_id' not in args else args.out_biz_id)]:
         if arg_tuple[0] in args:
@@ -505,6 +733,32 @@ if __name__ == "__main__":
         for key, val in paths.items():
             if val is not None and not os.path.isabs(val):
                 paths[key] = os.path.join(args.dir, val)
+
+    for arg_tuple in ip_arg_tuples:
+        if len(arg_tuple[1]) > 0:
+            verify_path(paths[arg_tuple[0]], typ=arg_tuple[2])
+
+    kwarg_dict = {'verbose': args.verbose, 'drop_regex': args.drop_regex}
+    if args.dataframe is not None:
+        kwarg_dict['dataframe'] = Df.PANDAS if args.dataframe == 'pandas' else Df.DASK
+    for arg_tuple in [('limit_id', None if 'limit_id' not in args else args.limit_id),
+                      ('nrows', None if 'nrows' not in args else args.nrows)]:
+        if arg_tuple[0] in args:
+            kwarg_dict[arg_tuple[0]] = arg_tuple[1]
+    if 'match_regex' in args:
+        for regex_cmd in args.match_regex:
+            split_file_regex = regex_cmd.split(':')
+            if len(split_file_regex) != 2:
+                arg_error(parser, f"Invalid format for -mx/--match_regex, expected 'csv_id:column_name=regex'")
+
+            splits_col_regex = split_file_regex[1].split('=')
+            if len(splits_col_regex) != 2:
+                arg_error(parser, f"Invalid format for -mx/--match_regex, expected 'csv_id:column_name=regex'")
+
+            if 'regex' not in kwarg_dict:
+                kwarg_dict['regex'] = {}
+            #                   csv_id                [column_name, regex]
+            kwarg_dict['regex'][split_file_regex[0]] = splits_col_regex
 
     # load categories
     if len(args.cat_list) > 0:
@@ -522,8 +776,8 @@ if __name__ == "__main__":
     elif len(args.biz) > 0:
         if categories_lst is None:
             required_arg_error(parser, ['-c/--cat', '-cl/--cat_list'])
-        biz_id_lst = get_business(paths['biz'], categories_lst, paths['out_biz'], paths['out_biz_id'],
-                                  drop_cols=args.drop_regex, verbose=args.verbose)
+        _, biz_id_lst = get_business(paths['biz'], category_list=categories_lst, out_path=paths['out_biz'],
+                                     save_ids_path=paths['out_biz_id'], arg_dict=kwarg_dict)
     else:
         biz_id_lst = None
 
@@ -535,23 +789,10 @@ if __name__ == "__main__":
             else:
                 break
 
-    kwarg_dict = {'verbose': args.verbose}
-    if args.dataframe is not None:
-        kwarg_dict['dataframe'] = Df.PANDAS if args.dataframe == 'pandas' else Df.DASK
-    if 'nrows' in args:
-        kwarg_dict['nrows'] = args.nrows
-    if 'match_regex' in args:
-        splits = args.match_regex.split('=')
-        if len(splits) != 2:
-            arg_error(parser, f"Invalid format for -mx/--match_regex")
-
-        kwarg_dict['col'] = splits[0]
-        kwarg_dict['regex'] = splits[1]
-
     # filter reviews
     if paths['out_review'] is not None:
-        if 'df' not in kwarg_dict:
-            kwarg_dict['df'] = Df.DASK
+        if 'dataframe' not in kwarg_dict:
+            kwarg_dict['dataframe'] = Df.DASK
         get_reviews(paths['review'], biz_id_lst, paths['out_review'], arg_dict=kwarg_dict)
 
     # filter tips
@@ -560,10 +801,13 @@ if __name__ == "__main__":
 
     # filter checkin
     if paths['out_chkin'] is not None:
-        # TODO handle long lines in raw checkin data
-        raise NotImplemented('Currently not supported, raw file requires preprocessing for long lines')
-        # get_checkin(paths['chkin'], biz_id_lst, paths['out_chkin'], arg_dict=kwarg_dict)
+        get_checkin(paths['chkin'], biz_id_lst, paths['out_chkin'], arg_dict=kwarg_dict)
 
     # filter photo
     if paths['out_photo'] is not None:
         get_photos(paths['pin'], biz_id_lst, paths['out_photo'], arg_dict=kwarg_dict)
+
+    # photo dataset
+    if paths['out_photo_set'] is not None:
+        generate_photo_set(paths['biz_photo'], paths['pin'], biz_id_lst, paths['photo_folder'], paths['out_photo_set'],
+                           arg_dict=kwarg_dict)

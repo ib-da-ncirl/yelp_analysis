@@ -8,7 +8,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="yelp_analysis",
-    version='0.0.1',
+    version='0.0.2',
     author="Ian Buttimer",
     author_email="author@example.com",
     description="Yelp Open Dataset Analysis",
@@ -19,7 +19,8 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
       'pandas>=1.0.5',
-      'dask>=2.19.0'
+      'dask>=2.19.0',
+      'pillow~=7.2.0'
     ],
     dependency_links=[
     ],
