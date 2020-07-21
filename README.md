@@ -9,10 +9,10 @@ Install dependencies via
 ### Usage
     usage: etl.py [-h] [-d DIR] [-b BIZ | -bi BIZ_IDS] [-r REVIEW] [-t TIPS]
                   [-ci CHKIN] [-pi PIN] [-c CAT | -cl CAT_LIST] [-p PARENT]
-                  [-e EXCLUDE] [-ob OUT_BIZ] [-or OUT_REVIEW] [-ot OUT_TIPS]
-                  [-oci OUT_CHKIN] [-op OUT_PHOTO] [-bp BIZ_PHOTO]
-                  [-pf PHOTO_FOLDER] [-ops OUT_PHOTO_SET] [-oc OUT_CAT]
-                  [-obi OUT_BIZ_ID] [-dx DROP_REGEX]
+                  [-e EXCLUDE] [-ob OUT_BIZ] [-opr OUT_PREFILTER_REVIEW]
+                  [-or OUT_REVIEW] [-ot OUT_TIPS] [-oci OUT_CHKIN] [-op OUT_PHOTO]
+                  [-ops OUT_PHOTO_SET] [-bp BIZ_PHOTO] [-pf PHOTO_FOLDER]
+                  [-oc OUT_CAT] [-obi OUT_BIZ_ID] [-dx DROP_REGEX]
                   [-mx MATCH_REGEX [MATCH_REGEX ...]] [-df {pandas,dask}]
                   [-nr NROWS] [-li LIMIT_ID] [-v]
     
@@ -48,34 +48,37 @@ Install dependencies via
                             Exclude categories; a comma separated list of
                             categories to exclude
       -ob OUT_BIZ, --out_biz OUT_BIZ
-                            Path to business csv file; absolute or relative to
-                            'root directory' if argument supplied
+                            Path to business csv file to create; absolute or
+                            relative to 'root directory' if argument supplied
+      -opr OUT_PREFILTER_REVIEW, --out_prefilter_review OUT_PREFILTER_REVIEW
+                            Path to review pre-filter csv file to create; absolute
+                            or relative to 'root directory' if argument supplied
       -or OUT_REVIEW, --out_review OUT_REVIEW
-                            Path to review csv file; absolute or relative to 'root
-                            directory' if argument supplied
+                            Path to review csv file to create; absolute or
+                            relative to 'root directory' if argument supplied
       -ot OUT_TIPS, --out_tips OUT_TIPS
-                            Path to tips csv file; absolute or relative to 'root
-                            directory' if argument supplied
+                            Path to tips csv file to create; absolute or relative
+                            to 'root directory' if argument supplied
       -oci OUT_CHKIN, --out_chkin OUT_CHKIN
-                            Path to checkin csv file; absolute or relative to
-                            'root directory' if argument supplied
+                            Path to checkin csv file to create; absolute or
+                            relative to 'root directory' if argument supplied
       -op OUT_PHOTO, --out_photo OUT_PHOTO
-                            Path to photo csv file; absolute or relative to 'root
-                            directory' if argument supplied
+                            Path to photo csv file to create; absolute or relative
+                            to 'root directory' if argument supplied
+      -ops OUT_PHOTO_SET, --out_photo_set OUT_PHOTO_SET
+                            Path to photo set csv file to create; absolute or
+                            relative to 'root directory' if argument supplied
       -bp BIZ_PHOTO, --biz_photo BIZ_PHOTO
                             Path to business csv for photo dataset file; absolute
                             or relative to 'root directory' if argument supplied
       -pf PHOTO_FOLDER, --photo_folder PHOTO_FOLDER
                             Path to photo folder; absolute or relative to 'root
                             directory' if argument supplied
-      -ops OUT_PHOTO_SET, --out_photo_set OUT_PHOTO_SET
-                            Path to photo set folder file; absolute or relative to
-                            'root directory' if argument supplied
       -oc OUT_CAT, --out_cat OUT_CAT
-                            Path to category list csv to create; absolute or
+                            Path to category list file to create; absolute or
                             relative to 'root directory' if argument supplied
       -obi OUT_BIZ_ID, --out_biz_id OUT_BIZ_ID
-                            Path to business ids csv to create; absolute or
+                            Path to business ids file to create; absolute or
                             relative to 'root directory' if argument supplied
       -dx DROP_REGEX, --drop_regex DROP_REGEX
                             Regex for business csv columns to drop
@@ -147,6 +150,12 @@ The list of business ids will be read from `business_ids.txt`, and the contents 
     python3 etl.py -d /path/to -bi business_ids.txt -r yelp_dataset/yelp_academic_dataset_review.csv -or reviews.csv
 
 The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_business.csv` are filtered to exclude reviews for businesses not in the id list. The remaining reviews will be saved to `/path/to/reviews.csv`.
+
+Alternatively, the reviews csv file can be generated from a pre-filtered csv file.
+
+    python3 etl.py -d /path/to -bi business_ids.txt -r yelp_dataset/yelp_academic_dataset_review.csv -opr prefilter_review.csv -or reviews.csv
+
+The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_business.csv` are filtered to exclude reviews for businesses not in the id list and saved to `prefilter_review.csv`. `prefilter_review.csv` is provided as the input to the standard loading function, allowing the remaining reviews that match any additional criteria to be saved to `/path/to/reviews.csv`. This may be beneficial on memory constrained devices.
 
 ##### Generate csv file of tips for specified business ids 
 

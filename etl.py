@@ -452,21 +452,59 @@ def get_business(csv_path, category_list=None, out_path=None, save_ids_path=None
     return biz_df, req_biz_id_lst
 
 
-def get_reviews(csv_path, id_lst, out_path, arg_dict=None):
+def get_reviews(csv_path, id_lst, out_path, prefilter_path=None, arg_dict=None):
     """
     Get the reviews for the specified list of business ids
     :param csv_path: Path to review csv file
     :param id_lst:  List of business ids
     :param out_path: Path to save filtered reviews to
+    :param prefilter_path: Path to save pre-filtered reviews to
     :param arg_dict: keyword arguments
     :return:
     """
-    return load_csv('reviews', csv_path, dtype={
+    load_path = csv_path
+    filter_id_lst = id_lst
+    if prefilter_path is not None:
+        load_path = prefilter_path  # give prefiltered input to load_csv()
+        filter_id_lst = None    # no need to filter ids in load_csv()
+        biz_iz_idx = -1
+
+        # hash ids for faster comparison
+        hash_id_list = None
+        if id_lst is not None:
+            hash_id_list = []
+            for bid in id_lst:
+                hash_id_list.append(hash(bid))
+
+        print(f"Pre-filter {csv_path} to {prefilter_path}")
+
+        count = 0
+        total = 0
+        with open(csv_path, "r") as fhin:
+            with open(prefilter_path, "w") as fhout:
+                for line in fhin:
+                    columns = line.strip(' \n').split(",")
+                    if count == 0:
+                        if "business_id" in columns:
+                            biz_iz_idx = columns.index("business_id")
+                        if biz_iz_idx < 0:
+                            error("'business_id' index not found")
+                        ok = True
+                    else:
+                        ok = hash(columns[biz_iz_idx]) in hash_id_list
+
+                    count = progress("Row", total, count)
+
+                    if ok:
+                        fhout.write(line)
+
+    return load_csv('reviews', load_path, dtype={
         "cool": object,
         "funny": object,
         "useful": object,
         "stars": object,
-    }, out_path=out_path, filter_id_column='business_id', filter_id_lst=id_lst, arg_dict=arg_dict, csv_id='review')
+    }, out_path=out_path, filter_id_column='business_id', filter_id_lst=filter_id_lst,
+                    arg_dict=arg_dict, csv_id='review')
 
 
 def get_tips(csv_path, id_lst, out_path, arg_dict=None):
@@ -512,7 +550,8 @@ def get_photos(csv_path, id_lst, out_path, arg_dict=None):
 def progress(cmt, total, current, step=100):
     current += 1
     if current % step == 0 or total == current:
-        print(f"{cmt}: {current} ({current*100/total:.1f}%)", flush=True, end='\r' if total > current else '\n')
+        percent = "" if total == 0 else f"({current*100/total:.1f}%)"
+        print(f"{cmt}: {current} {percent}", flush=True, end='\r' if total > current or total == 0 else '\n')
     return current
 
 
@@ -529,6 +568,8 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     """
     biz_df, _ = get_business(biz_path, id_list=id_lst, arg_dict=arg_dict, csv_id='biz_photo')
     photo_df, _, _ = get_photos(photo_csv_path, id_lst, None, arg_dict=arg_dict)
+
+    biz_df['stars'] = biz_df['stars'].apply(lambda x: str(x).replace(".", "_"))
 
     print(f"Processing photo details")
 
@@ -584,6 +625,8 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     wh_anal("Height")
     unique_vals = photo_set_df['mode'].unique()
     print(f"Mode: {len(unique_vals)} mode{'' if len(unique_vals) == 1 else 's'} - {unique_vals}")
+    unique_vals = photo_set_df['stars'].unique()
+    print(f"Stars: {len(unique_vals)} class{'' if len(unique_vals) == 1 else 'es'} - {unique_vals}")
 
     save_csv(photo_set_df, out_path, index=False)
 
@@ -654,27 +697,24 @@ if __name__ == "__main__":
         default='', required=False)
     # output files
     for arg_tuple in [('-ob', '--out_biz', 'business'),
+                      ('-opr', '--out_prefilter_review', 'review pre-filter'),
                       ('-or', '--out_review', 'review'),
                       ('-ot', '--out_tips', 'tips'),
                       ('-oci', '--out_chkin', 'checkin'),
-                      ('-op', '--out_photo', 'photo')]:
+                      ('-op', '--out_photo', 'photo'),
+                      ('-ops', '--out_photo_set', 'photo set')]:
         parser.add_argument(
-            arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} csv"),
+            arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} csv", action="to create"),
             default=argparse.SUPPRESS, required=False
         )
     parser.add_argument('-bp', '--biz_photo', type=str, help=file_arg_help("business csv for photo dataset"),
                         default='')     # just so as not to conflict with mutually exclusive --biz/--biz_ids arguments
     parser.add_argument('-pf', '--photo_folder', type=str, help=file_arg_help("photo", target='folder'),
                         default='')
-    for arg_tuple in [('-ops', '--out_photo_set', 'photo set')]:
-        parser.add_argument(
-            arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} folder"),
-            default=argparse.SUPPRESS, required=False
-        )
     for arg_tuple in [('-oc', '--out_cat', 'category list'),
                       ('-obi', '--out_biz_id', 'business ids')]:
         parser.add_argument(
-            arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} csv", "to create"),
+            arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]}", action="to create"),
             default=argparse.SUPPRESS, required=False
         )
     parser.add_argument('-dx', '--drop_regex', help='Regex for business csv columns to drop', type=str, default=None)
@@ -704,7 +744,8 @@ if __name__ == "__main__":
     paths = {'biz': None, 'biz_ids': None, 'biz_photo': None, 'photo_folder': None,
              'cat': None, 'cat_list': None,
              'review': None, 'tips': None, 'chkin': None, 'pin': None,
-             'out_biz': None, 'out_review': None, 'out_tips': None, 'out_chkin': None, 'out_photo': None,
+             'out_biz': None, 'out_review': None, 'out_prefilter_review': None,
+             'out_tips': None, 'out_chkin': None, 'out_photo': None,
              'out_photo_set': None,
              'out_cat': None, 'out_biz_id': None}
     ip_arg_tuples = [('biz', args.biz, 'file'), ('biz_ids', args.biz_ids, 'file'),
@@ -720,6 +761,7 @@ if __name__ == "__main__":
         if arg_tuple[0] in args:
             paths[arg_tuple[0]] = arg_tuple[1]
     for arg_tuple in [('out_biz', None if 'out_biz' not in args else args.out_biz),
+                      ('out_prefilter_review', None if 'out_prefilter_review' not in args else args.out_prefilter_review),
                       ('out_review', None if 'out_review' not in args else args.out_review),
                       ('out_tips', None if 'out_tips' not in args else args.out_tips),
                       ('out_chkin', None if 'out_chkin' not in args else args.out_chkin),
@@ -793,7 +835,7 @@ if __name__ == "__main__":
     if paths['out_review'] is not None:
         if 'dataframe' not in kwarg_dict:
             kwarg_dict['dataframe'] = Df.DASK
-        get_reviews(paths['review'], biz_id_lst, paths['out_review'], arg_dict=kwarg_dict)
+        get_reviews(paths['review'], biz_id_lst, paths['out_review'], paths['out_prefilter_review'], arg_dict=kwarg_dict)
 
     # filter tips
     if paths['out_tips'] is not None:
