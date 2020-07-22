@@ -20,7 +20,14 @@ setuptools.setup(
     install_requires=[
       'pandas>=1.0.5',
       'dask>=2.19.0',
-      'pillow~=7.2.0'
+      'pillow~=7.2.0',
+      'yaml~=0.2.5',
+      'pyyaml~=5.3.1',
+      'setuptools~=47.3.1',
+      'tensorflow~=2.2.0',
+      'tensorflow-gpu~=2.2.0',
+      'numpy~=1.18.5',
+      'matplotlib~=3.2.2'
     ],
     dependency_links=[
     ],

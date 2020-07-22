@@ -1,10 +1,13 @@
 # yelp_analysis
 
+1. [etl.py](#etlpy)
+2. [photo_stars.py](#photo_starspy)
+
 ## etl.py
 ### Installation
 Install dependencies via
 
-    pip3 install -r requirements.txt
+    pip3 install -r etl_requirements.txt
     
 ### Usage
     usage: etl.py [-h] [-d DIR] [-b BIZ | -bi BIZ_IDS] [-r REVIEW] [-t TIPS]
@@ -228,5 +231,19 @@ Generate the files required for an analysis of restaurants. The required data is
     python3 etl.py -d /path/to -c categories.json -oc categories.txt -p restaurants -b yelp_dataset/yelp_academic_dataset_business.csv -obi business_ids.txt -dx attributes\.HairSpecializesIn.* -ob business.csv -r yelp_dataset/yelp_academic_dataset_review.csv -or reviews.csv -t yelp_dataset/yelp_academic_dataset_tip.csv -ot tips.csv -bp yelp_dataset/yelp_academic_dataset_business.csv -pi yelp_photos/photos.csv -pf yelp_photos/photos -ops photo_dataset.csv -mx pin:label=food
 
 
+## photo_stars.py
+### Installation
+Install dependencies via
 
-  
+    pip3 install -r requirements.txt
+    
+### Usage
+    Usage: photo_stars.py
+     -h        |--help                     : Display usage
+     -c <value>|--cfg_path <value>         : Specify path to configuration script
+     -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
+     -p <value>|--photo_path <value>       : Specify path to the photos folder
+     -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
+     -r <value>|--run_model <value>        : Model to run
+ 
+ Any options set in the configuration file will be overwritten by their command line equivalents. 
