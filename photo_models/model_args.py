@@ -19,13 +19,21 @@
 #  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #  SOFTWARE.
 #
+from typing import Union
+from collections import namedtuple
+
 from keras_preprocessing.image import DataFrameIterator
+import tensorflow as tf
+
+
+SplitTotalBatch = namedtuple('SplitTotalBatch', ['val_split', 'total', 'batch'])
 
 
 class ModelArgs:
 
     def __init__(self, device_name: str, input_shape: tuple, class_count: int,
-                 train_data: DataFrameIterator, val_data: DataFrameIterator,
+                 train_data: Union[DataFrameIterator, tf.data.Dataset],
+                 val_data: Union[DataFrameIterator, tf.data.Dataset],
                  epochs: int):
         """
         Initialise this object
@@ -42,6 +50,9 @@ class ModelArgs:
         self._train_data = train_data
         self._val_data = val_data
         self._epochs = epochs
+        self._validation_split = 0.0
+        self._total = 0
+        self._batch_size = 0
 
     @property
     def device_name(self) -> str:
@@ -68,19 +79,19 @@ class ModelArgs:
         self._class_count = class_count
 
     @property
-    def train_data(self) -> DataFrameIterator:
+    def train_data(self) -> Union[DataFrameIterator, tf.data.Dataset]:
         return self._train_data
 
     @train_data.setter
-    def train_data(self, train_data: DataFrameIterator):
+    def train_data(self, train_data: Union[DataFrameIterator, tf.data.Dataset]):
         self._train_data = train_data
 
     @property
-    def val_data(self) -> DataFrameIterator:
+    def val_data(self) -> Union[DataFrameIterator, tf.data.Dataset]:
         return self._val_data
 
     @val_data.setter
-    def val_data(self, val_data: DataFrameIterator):
+    def val_data(self, val_data: Union[DataFrameIterator, tf.data.Dataset]):
         self._val_data = val_data
 
     @property
@@ -90,4 +101,36 @@ class ModelArgs:
     @epochs.setter
     def epochs(self, epochs: int):
         self._epochs = epochs
+
+    @property
+    def validation_split(self) -> float:
+        return self._validation_split
+
+    @validation_split.setter
+    def validation_split(self, validation_split: float):
+        self._validation_split = validation_split
+
+    @property
+    def total(self) -> int:
+        return self._total
+
+    @total.setter
+    def total(self, total: int):
+        self._total = total
+
+    @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, batch_size: int):
+        self._batch_size = batch_size
+
+    def set_split_total_batch(self, validation_split: float, total: int, batch_size: int):
+        self._validation_split = validation_split
+        self._total = total
+        self._batch_size = batch_size
+
+    def split_total_batch(self) -> SplitTotalBatch:
+        return SplitTotalBatch(self._validation_split, self._total, self._batch_size)
 

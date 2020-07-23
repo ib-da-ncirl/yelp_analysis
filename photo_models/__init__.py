@@ -22,8 +22,8 @@
 from .tf_image_eg import tf_image_eg
 from .model_args import ModelArgs
 
-# if somebody does "from sales_journal.pipelines import *", this is what they will
-# be able to access:
+# Add the names of model functions to this list.
+# Don't forget to import the function above as well
 __all__ = [
     'ModelArgs',
     'tf_image_eg',

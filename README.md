@@ -17,7 +17,7 @@ Install dependencies via
                   [-ops OUT_PHOTO_SET] [-bp BIZ_PHOTO] [-pf PHOTO_FOLDER]
                   [-oc OUT_CAT] [-obi OUT_BIZ_ID] [-dx DROP_REGEX]
                   [-mx MATCH_REGEX [MATCH_REGEX ...]] [-df {pandas,dask}]
-                  [-nr NROWS] [-li LIMIT_ID] [-v]
+                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-v]
     
     Perform ETL on the Yelp Dataset CSV data to extract the subset of
     businesses/reviews etc. based on a parent category
@@ -92,6 +92,8 @@ Install dependencies via
                             'tip'=tip csv file and 'review'=review csv file
       -df {pandas,dask}, --dataframe {pandas,dask}
                             Dataframe to use; 'pandas' or 'dask'
+      -pe {c,python}, --parse_engine {c,python}
+                            Parser engine to use; 'c' or 'python'}
       -nr NROWS, --nrows NROWS
                             Number of rows to read, (Note: ignored with '-df=dask'
                             option)
@@ -238,12 +240,67 @@ Install dependencies via
     pip3 install -r requirements.txt
     
 ### Usage
-    Usage: photo_stars.py
+Usage: photo_stars.py
      -h        |--help                     : Display usage
      -c <value>|--cfg_path <value>         : Specify path to configuration script
      -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
      -p <value>|--photo_path <value>       : Specify path to the photos folder
      -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
      -r <value>|--run_model <value>        : Model to run
+     -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
  
  Any options set in the configuration file will be overwritten by their command line equivalents. 
+
+Specify the model to run using `run_model` in the configuration file, or in the command line using the `-r my_model` option.
+
+If the `show_val_loss`, `save_val_loss` or `save_summary` options are specified, the results of the classification will be saved in the folder specified in the `results_path_root` option in the configuration file.
+For example, with the settings
+
+    # results folder
+    results_path_root: ./results
+    # default template for results folder for each model; 'results_path_root/model_name/YYMMDD_HHMM'
+    results_path: <results_path_root>/<model_name>/{%y%m%d_%H%M}
+    # display val & loss graph when finished
+    show_val_loss: false
+    # save val & loss graph when finished
+    save_val_loss: true
+    # save model summary when finished
+    save_summary: true
+
+and running a model called `my_model` results in the files 
+
+- `./results/my_model/200723_0909/my_model.png`
+
+    Training and validation accuracy plot
+    
+- `./results/my_model/200723_0909/my_model.csv`
+
+    Training and validation accuracy data for each epoch
+
+- `./results/my_model/200723_0909/summary.txt`
+
+    Summary of model layers.
+
+- `./results/result_log.csv`
+
+    Model results summary. Updated with final result and details for each model run. 
+
+where `200723_0909` is the date and time when of the model run.
+
+### Development
+#### Adding a new model 
+
+- Add an entry in the configuration file, See [sample_config.yaml](sample_config.yaml) for details.
+
+    **Note**:
+    - model `name` should be unique
+    - models are hierarchical
+        * model `parent` refers to the name of the model's parent 
+        * settings in the child model, overwriting any setting in the parent
+    - model `function` is the name of the function which implements the model, and should be unique.
+- Add a new python file in the `photo_models` package with a function which has the same name as specified in `function` in the model configuration. 
+    Alternatively a new function can be added to an existing file. See [photo_models/tf_image_eg.py](photo_models/tf_image_eg.py) for an example.
+    
+    **Note**
+    - Function signature must be `def my_model_function(model_args: ModelArgs):` 
+- Add the name of the function to [photo_models/__init__.py](photo_models/__init__.py)

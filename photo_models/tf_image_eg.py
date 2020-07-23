@@ -7,6 +7,8 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, Flatten, Dropout, MaxPooling2D, GlobalAveragePooling2D
 
+from photo_models.model_misc import calc_step_size
+
 
 def tf_image_eg(model_args: ModelArgs):
     # The model consists of three convolution blocks with a max pool layer in each of them.
@@ -32,8 +34,9 @@ def tf_image_eg(model_args: ModelArgs):
 
         model.summary()
 
-        step_size_train = model_args.train_data.n // model_args.train_data.batch_size
-        step_size_valid = model_args.val_data.n // model_args.val_data.batch_size
+        stb = model_args.split_total_batch()
+        step_size_train = calc_step_size(model_args.train_data, stb, 'training')
+        step_size_valid = calc_step_size(model_args.val_data, stb, 'validation')
 
         history = model.fit(
             model_args.train_data,

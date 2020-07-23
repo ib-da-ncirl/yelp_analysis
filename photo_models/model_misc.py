@@ -19,9 +19,11 @@
 #  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #  SOFTWARE.
 #
+from typing import Union
 
-from photo_models.model_args import ModelArgs
+from photo_models.model_args import ModelArgs, SplitTotalBatch
 import tensorflow as tf
+from keras_preprocessing.image import DataFrameIterator
 
 
 def run_and_history(model, model_args: ModelArgs):
@@ -40,3 +42,12 @@ def run_and_history(model, model_args: ModelArgs):
         )
 
     return model, history
+
+
+def calc_step_size(data: Union[DataFrameIterator, tf.data.Dataset], info: SplitTotalBatch, set_name: str):
+    if isinstance(data, DataFrameIterator):
+        step_size = data.n // data.batch_size
+    else:
+        percent = info.val_split if set_name == 'validation' else 1 - info.val_split
+        step_size = (info.total * percent) // info.batch
+    return step_size
