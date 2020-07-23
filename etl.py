@@ -225,6 +225,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
     # exclude id list flag; default False. False: accept all ids in list, True: accept all ids not in list
     ex_id = False if 'ex_id' not in arg_dict else arg_dict['ex_id']
     show_duration = True if 'show_duration' not in arg_dict else arg_dict['show_duration']
+    parse_engine = 'python' if 'parse_engine' not in arg_dict else arg_dict['parse_engine']
 
     col = None
     regex = None
@@ -233,9 +234,13 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
             col = arg_dict['regex'][csv_id][0]
             regex = arg_dict['regex'][csv_id][1]
 
+    do_filter_col = (col is not None and regex is not None)     # do col/regex filter
+    do_filter_lambda = (filter_lambda_column is not None and filter_lambda is not None)     # do lambda filter?
+
     # hash ids for faster comparison
     hash_id_list = None
-    if filter_id_lst is not None and filter_id_column is not None:
+    do_filter_by_id = (filter_id_lst is not None and filter_id_column is not None)  # do filter id?
+    if do_filter_by_id:
         hash_id_list = []
         for bid in filter_id_lst:
             hash_id_list.append(hash(bid))
@@ -253,7 +258,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
         'dtype': dtype,
         'converters': converters,
         'encoding': 'utf-8',
-        'engine': 'python',
+        'engine': parse_engine,
         'quoting': csv.QUOTE_MINIMAL
     }
     if df == Df.PANDAS:
@@ -269,77 +274,78 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
 
     print(f"{len(rev_df)} {entity_name} loaded")
 
-    # filter by column value
-    cmts = []
-    if col is not None and regex is not None:
-        if col not in rev_df.columns:
-            error(f"Column '{col}' not in dataframe")
+    if do_filter_col or do_filter_lambda or do_filter_by_id or (limit_id is not None):
+        # filter by column value
+        cmts = []
+        if do_filter_col:
+            if col not in rev_df.columns:
+                error(f"Column '{col}' not in dataframe")
 
-        cmts.append(f"'{col}' column")
+            cmts.append(f"'{col}' column")
 
-        def col_val_fxn(mcol):
-            return re.search(regex, mcol)
-    else:
-        def col_val_fxn(mcol):
-            return True
+            def col_val_fxn(mcol):
+                return re.search(regex, mcol)
+        else:
+            def col_val_fxn(mcol):
+                return True
 
-    if filter_lambda is not None:
-        cmts.append(f"'{filter_lambda_column}' column")
-    if hash_id_list is not None:
-        cmts.append(f"'{filter_id_column}' column, {len(hash_id_list)} possible values")
+        if filter_lambda is not None:
+            cmts.append(f"'{filter_lambda_column}' column")
+        if do_filter_by_id is not None:
+            cmts.append(f"'{filter_id_column}' column, {len(hash_id_list)} possible values")
 
-    count = 0
-    total = len(rev_df)
-    if df != Df.DASK:
-        def inc_progress():
-            nonlocal count
-            count = progress("Row", total, count)
-    else:
-        def inc_progress():
-            nonlocal count
-            count += 1
+        count = 0
+        total = len(rev_df)
+        if df != Df.DASK:
+            def inc_progress():
+                nonlocal count
+                count = progress("Row", total, count)
+        else:
+            def inc_progress():
+                nonlocal count
+                count += 1
 
-    def filter_by_id_and_col(filter_props):
+        def filter_by_id_and_col(filter_props):
+            if do_filter_lambda:
+                # filter on lambda function
+                ok = filter_lambda(filter_props[filter_lambda_column])
+            else:
+                ok = True
+            if ok:
+                # filter on column value
+                ok = col_val_fxn(None if col is None else filter_props[col])
+            if ok:
+                if do_filter_by_id:
+                    # filter on ids
+                    ok = hash(filter_props[filter_id_column]) in hash_id_list
+                if ex_id:
+                    ok = not ok  # exclude id
+            nonlocal max_count
+            if ok and max_count > 0:
+                max_count -= 1
+            else:
+                ok = False
+            inc_progress()
+            return ok
+
+        cmt = f"Filtering for required {entity_name}"
+        for cnd in cmts:
+            cmt += f"\n- matching {cnd}"
+        if max_count < sys.maxsize:
+            cmt += f"\n- max count {max_count}"
+        print(cmt)
+
+        # filter by ids
+        filter_col_list = [filter_id_column, col] if col is not None else [filter_id_column]
         if filter_lambda_column is not None and filter_lambda is not None:
-            # filter on lambda function
-            ok = filter_lambda(filter_props[filter_lambda_column])
-        else:
-            ok = True
-        if ok:
-            # filter on column value
-            ok = col_val_fxn(None if col is None else filter_props[col])
-        if ok:
-            if hash_id_list is not None:
-                # filter on ids
-                ok = hash(filter_props[filter_id_column]) in hash_id_list
-            if ex_id:
-                ok = not ok  # exclude id
-        nonlocal max_count
-        if ok and max_count > 0:
-            max_count -= 1
-        else:
-            ok = False
-        inc_progress()
-        return ok
+            filter_col_list.append(filter_lambda_column)
+        if df == Df.PANDAS:
+            rev_df['req'] = rev_df[filter_col_list].apply(filter_by_id_and_col, axis=1)
+        elif df == Df.DASK:
+            rev_df['req'] = rev_df[filter_col_list].apply(filter_by_id_and_col, axis=1, meta=('req', 'bool'))
 
-    cmt = f"Filtering for required {entity_name}"
-    for cnd in cmts:
-        cmt += f"\n- matching {cnd}"
-    if max_count < sys.maxsize:
-        cmt += f"\n- max count {max_count}"
-    print(cmt)
-
-    # filter by ids
-    filter_col_list = [filter_id_column, col] if col is not None else [filter_id_column]
-    if filter_lambda_column is not None and filter_lambda is not None:
-        filter_col_list.append(filter_lambda_column)
-    if df == Df.PANDAS:
-        rev_df['req'] = rev_df[filter_col_list].apply(filter_by_id_and_col, axis=1)
-    elif df == Df.DASK:
-        rev_df['req'] = rev_df[filter_col_list].apply(filter_by_id_and_col, axis=1, meta=('req', 'bool'))
-
-    if df != Df.DASK:
-        progress("Row", total, total)
+        if df != Df.DASK:
+            progress("Row", total, total)
 
     # drop columns matching the drop column regex
     if drop_regex is not None:
@@ -353,10 +359,13 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
             print(f'{cols_to_drop}')
             rev_df = rev_df.drop(list(cols_to_drop), axis=1)
 
-    # get just the required businesses
-    req_rev_df = rev_df[rev_df['req']]
-    # drop work column
-    req_rev_df = req_rev_df.drop(['req'], axis=1)
+    # get just the required rows
+    if 'req' in rev_df.columns.values:
+        req_rev_df = rev_df[rev_df['req']]
+        # drop work column
+        req_rev_df = req_rev_df.drop(['req'], axis=1)
+    else:
+        req_rev_df = rev_df
 
     if entity_id_column is not None:
         entity_id_lst = req_rev_df[entity_id_column].to_list()
@@ -465,7 +474,7 @@ def get_reviews(csv_path, id_lst, out_path, prefilter_path=None, arg_dict=None):
     load_path = csv_path
     filter_id_lst = id_lst
     if prefilter_path is not None:
-        load_path = prefilter_path  # give prefiltered input to load_csv()
+        load_path = prefilter_path  # give pre-filtered input to load_csv()
         filter_id_lst = None    # no need to filter ids in load_csv()
         biz_iz_idx = -1
 
@@ -725,6 +734,8 @@ if __name__ == "__main__":
                         type=str, default=argparse.SUPPRESS, nargs='+')
     parser.add_argument('-df', '--dataframe', help="Dataframe to use; 'pandas' or 'dask'",
                         choices=['pandas', 'dask'], required=False)
+    parser.add_argument('-pe', '--parse_engine', help="Parser engine to use; 'c' or 'python'}",
+                        choices=['c', 'python'], required=False)
     parser.add_argument('-nr', '--nrows', help="Number of rows to read, (Note: ignored with '-df=dask' option)",
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-li', '--limit_id', help="Limit number of business ids to read",
@@ -783,6 +794,8 @@ if __name__ == "__main__":
     kwarg_dict = {'verbose': args.verbose, 'drop_regex': args.drop_regex}
     if args.dataframe is not None:
         kwarg_dict['dataframe'] = Df.PANDAS if args.dataframe == 'pandas' else Df.DASK
+    if args.parse_engine is not None:
+        kwarg_dict['parse_engine'] = 'c' if args.parse_engine == 'c' else 'python'
     for arg_tuple in [('limit_id', None if 'limit_id' not in args else args.limit_id),
                       ('nrows', None if 'nrows' not in args else args.nrows)]:
         if arg_tuple[0] in args:
