@@ -49,7 +49,7 @@ from collections import namedtuple
 
 from misc.config_reader import load_yaml
 from misc.get_env import test_file_path, get_file_path
-from misc.misc import less_dangerous_eval
+from misc.misc import less_dangerous_eval, pick_device, restrict_gpu_mem
 from photo_models.model_args import ModelArgs
 import photo_models
 
@@ -227,7 +227,6 @@ def default_or_val(default, dictionary: dict, key: str):
 
 
 def main():
-
     tf.debugging.set_log_device_placement(True)
 
     start = timer()
@@ -235,8 +234,18 @@ def main():
     # load app config
     app_cfg = get_app_config(sys.argv[0], sys.argv[1:])
 
+    if 'gpu_memory_limit' in app_cfg:
+        # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
+        restrict_gpu_mem(0, app_cfg['gpu_memory_limit'])
+        # Restrict TensorFlow to only allocate 90% of memory on the first GPU
+        # restrict_gpu_mem(0, 0.75)   # doesn't seem to work
+
     run_cfg = app_cfg['defaults'].copy()
-    run_cfg['device_name'] = app_cfg['modelling_device']
+
+    run_cfg['device_name'], fallback = pick_device(app_cfg['modelling_device'])
+    if fallback:
+        print(f"Device '{app_cfg['modelling_device']}' not available")
+    print(f"Using '{run_cfg['device_name']}'")
 
     run_cfg = load_model_cfg(app_cfg['models'], app_cfg['run_model'], run_cfg)
 
@@ -309,20 +318,22 @@ def main():
     input_tensor = Input(shape=input_shape)
 
     if app_cfg['source'] == 'img':
+        # ImageDataGenerator
         train_data = train_image_generator.flow_from_dataframe(dataset_df,
-                                                                   subset="training",
-                                                                   shuffle=True,
-                                                                   class_mode='categorical',
-                                                                   **common_arg)
+                                                               subset="training",
+                                                               shuffle=True,
+                                                               class_mode='categorical',
+                                                               **common_arg)
         params['train_images'] = len(train_data.filenames)
 
         val_data = train_image_generator.flow_from_dataframe(dataset_df,
-                                                                 subset="validation",
-                                                                 shuffle=True,
-                                                                 class_mode='categorical',
-                                                                 **common_arg)
+                                                             subset="validation",
+                                                             shuffle=True,
+                                                             class_mode='categorical',
+                                                             **common_arg)
         params['val_images'] = len(val_data.filenames)
     else:
+        # Dataset
         train_data = tf.data.Dataset.from_generator(
             lambda: train_image_generator.flow_from_dataframe(dataset_df,
                                                               subset="training",
@@ -461,4 +472,3 @@ def plotImages(images_arr):
         ax.axis('off')
     plt.tight_layout()
     plt.show()
-
