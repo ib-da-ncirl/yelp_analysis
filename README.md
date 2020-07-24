@@ -240,16 +240,16 @@ Install dependencies via
     pip3 install -r requirements.txt
     
 ### Usage
-Usage: photo_stars.py
-     -h        |--help                     : Display usage
-     -c <value>|--cfg_path <value>         : Specify path to configuration script
-     -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
-     -p <value>|--photo_path <value>       : Specify path to the photos folder
-     -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
-     -r <value>|--run_model <value>        : Model to run
-     -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
+    Usage: photo_stars.py
+         -h        |--help                     : Display usage
+         -c <value>|--cfg_path <value>         : Specify path to configuration script
+         -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
+         -p <value>|--photo_path <value>       : Specify path to the photos folder
+         -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
+         -r <value>|--run_model <value>        : Model to run
+         -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
  
- Any options set in the configuration file will be overwritten by their command line equivalents. 
+Any options set in the configuration file will be overwritten by their command line equivalents. 
 
 Specify the model to run using `run_model` in the configuration file, or in the command line using the `-r my_model` option.
 
