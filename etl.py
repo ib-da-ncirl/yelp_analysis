@@ -186,6 +186,33 @@ def save_csv(df, out_path, index=False):
         df.to_csv(out_path, index=index)
 
 
+def binary_search(arr, low, high, x):
+    """
+    Find index of x in arr if present, else -1
+    Thanks to https://www.geeksforgeeks.org/python-program-for-binary-search/
+    :param arr: Ascending order sorted array to search
+    :param low: Start index (inclusive)
+    :param high: End index (inclusive)
+    :param x: Element to find
+    :return: index of x in arr if present, else -1
+    """
+    # Check base case
+    if high >= low:
+        mid = (high + low) // 2
+        # If element is present at the middle itself
+        if arr[mid] == x:
+            return mid
+        # If element is smaller than mid, then it can only be present in left subarray
+        elif arr[mid] > x:
+            return binary_search(arr, low, mid - 1, x)
+        # Else the element can only be present in right subarray
+        else:
+            return binary_search(arr, mid + 1, high, x)
+    else:
+        # Element is not present in the array
+        return -1
+
+
 def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
              filter_id_column=None, filter_id_lst=None,
              filter_lambda_column=None, filter_lambda=None,
@@ -244,6 +271,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
         hash_id_list = []
         for bid in filter_id_lst:
             hash_id_list.append(hash(bid))
+        hash_id_list = sorted(hash_id_list)
 
     if limit_id is not None:
         max_count = limit_id
@@ -291,7 +319,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
 
         if filter_lambda is not None:
             cmts.append(f"'{filter_lambda_column}' column")
-        if do_filter_by_id is not None:
+        if do_filter_by_id is not False:
             cmts.append(f"'{filter_id_column}' column, {len(hash_id_list)} possible values")
 
         count = 0
@@ -317,7 +345,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
             if ok:
                 if do_filter_by_id:
                     # filter on ids
-                    ok = hash(filter_props[filter_id_column]) in hash_id_list
+                    ok = (binary_search(hash_id_list, 0, len(hash_id_list) - 1, hash(filter_props[filter_id_column])) >= 0)
                 if ex_id:
                     ok = not ok  # exclude id
             nonlocal max_count
