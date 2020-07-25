@@ -247,13 +247,14 @@ Install dependencies via
     
 ### Usage
     Usage: photo_stars.py
-         -h        |--help                     : Display usage
-         -c <value>|--cfg_path <value>         : Specify path to configuration script
-         -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
-         -p <value>|--photo_path <value>       : Specify path to the photos folder
-         -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
-         -r <value>|--run_model <value>        : Model to run
-         -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
+     -h        |--help                     : Display usage
+     -c <value>|--cfg_path <value>         : Specify path to configuration script
+     -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
+     -p <value>|--photo_path <value>       : Specify path to the photos folder
+     -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
+     -r <value>|--run_model <value>        : Model to run
+     -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
+     -l <value>|--photo_limit <value>      : Max number of photos to use; 'none' to use all available, or a number
  
 Any options set in the configuration file will be overwritten by their command line equivalents. 
 

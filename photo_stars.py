@@ -68,6 +68,7 @@ def get_config_options():
         'm': ConfigOpt('m:', 'modelling_device=', 'TensorFlow preferred modelling device; e.g. /cpu:0'),
         'r': ConfigOpt('r:', 'run_model=', 'Model to run'),
         's': ConfigOpt('s:', 'source=', "Model source; 'img' = ImageDataGenerator or 'ds' = Dataset"),
+        'l': ConfigOpt('l:', 'photo_limit=', "Max number of photos to use; 'none' to use all available, or a number"),
     }
     return __OPTS
 
@@ -133,7 +134,14 @@ def usage(name):
     print()
 
 
-def get_app_config(name, args):
+def get_app_config(name: str, args: list):
+    """
+    Get the application config
+    Note: command line options override config file options
+    :param name: Name of script
+    :param args: command line args
+    :return:
+    """
     try:
         opts, args = getopt.getopt(args, get_short_opts(), get_long_opts())
     except getopt.GetoptError as err:
@@ -143,8 +151,8 @@ def get_app_config(name, args):
 
     app_cfg_path = 'config.yaml'  # default in current folder
 
-    #                dataset_path, photo_path, preferred_device, model, source
-    cmd_line_opts = ['d', 'p', 'm', 'r', 's']
+    #                dataset_path, photo_path, preferred_device, model, source, limit
+    cmd_line_opts = ['d', 'p', 'm', 'r', 's', 'l']
     cmd_line_args = {}
     for opt, arg in opts:
         if opt == get_short_opt('h') or opt == get_long_opt('h'):
@@ -175,26 +183,39 @@ def get_app_config(name, args):
         for key, val in cmd_line_args.items():
             if key in ['dataset_path', 'photo_path']:
                 app_cfg['defaults'][key] = val
+            elif key in ['photo_limit']:
+                app_cfg['defaults'][key] = int(val)
             else:
                 app_cfg[key] = val
 
         # check some basic configs exist
         for key in ['defaults', 'run_model']:  # required root level keys
             if key not in app_cfg.keys():
-                raise EnvironmentError(f'Missing {key} configuration key')
+                error(f'Missing {key} configuration key')
     else:
-        raise EnvironmentError(f'Missing configuration')
+        error(f'Missing configuration')
 
     # required default keys
     for key in ['dataset_path', 'photo_path', 'epochs', 'image_width', 'image_height', 'x_col', 'y_col',
                 'color_mode', 'batch_size', 'seed']:
         if key not in app_cfg['defaults'].keys():
-            raise EnvironmentError(f"Missing '{key}' configuration key")
+            error(f"Missing '{key}' configuration key")
 
     return app_cfg
 
 
-def load_model_cfg(models, run_model, run_cfg):
+def error(msg):
+    sys.exit(f"Error: {msg}")
+
+
+def load_model_cfg(models: list, run_model: str, run_cfg: dict):
+    """
+    Load model config
+    :param models: List of available models
+    :param run_model: Name of model to run
+    :param run_cfg: Run config
+    :return:
+    """
     hierarchy = []
     search_model = run_model
     while search_model is not None:
@@ -209,7 +230,7 @@ def load_model_cfg(models, run_model, run_cfg):
                     search_model = None
                 break
         if not found_model:
-            raise EnvironmentError(f"Unable to find configuration for '{search_model}'")
+            error(f"Unable to find configuration for '{search_model}'")
 
     # load model config starting at root model
     for model_name in hierarchy:
@@ -252,7 +273,7 @@ def main():
     # required keys
     for key in ['function']:
         if key not in run_cfg.keys():
-            raise EnvironmentError(f"Missing '{key}' configuration key")
+            error(f"Missing '{key}' configuration key")
 
     run_cfg['rescale'] = less_dangerous_eval(run_cfg['rescale'])
 
@@ -263,7 +284,7 @@ def main():
     nrows = None
     if isinstance(run_cfg['photo_limit'], str):
         if run_cfg['photo_limit'].lower() != 'none':
-            raise ValueError(f"Unrecognised value for 'photo_limit': '{run_cfg['photo_limit']}'")
+            error(f"Unrecognised value for 'photo_limit': '{run_cfg['photo_limit']}'")
     else:
         nrows = run_cfg['photo_limit']
 
@@ -310,6 +331,13 @@ def main():
     }
     params.update(common_arg)
 
+    train_arg = common_arg.copy()
+    train_arg['subset'] = "training"
+    train_arg['shuffle'] = True
+    train_arg['class_mode'] = 'categorical'
+    val_arg = train_arg.copy()
+    val_arg['subset'] = "validation"
+
     if run_cfg['color_mode'] == 'grayscale':
         channels = 1
     else:  # 'rgb'/'rgba'
@@ -317,29 +345,19 @@ def main():
     input_shape = (run_cfg['image_height'], run_cfg['image_width'], channels)
     input_tensor = Input(shape=input_shape)
 
+    if 'source' not in app_cfg:
+        app_cfg['source'] = 'img'
     if app_cfg['source'] == 'img':
         # ImageDataGenerator
-        train_data = train_image_generator.flow_from_dataframe(dataset_df,
-                                                               subset="training",
-                                                               shuffle=True,
-                                                               class_mode='categorical',
-                                                               **common_arg)
+        train_data = train_image_generator.flow_from_dataframe(dataset_df, **train_arg)
         params['train_images'] = len(train_data.filenames)
 
-        val_data = train_image_generator.flow_from_dataframe(dataset_df,
-                                                             subset="validation",
-                                                             shuffle=True,
-                                                             class_mode='categorical',
-                                                             **common_arg)
+        val_data = train_image_generator.flow_from_dataframe(dataset_df, **val_arg)
         params['val_images'] = len(val_data.filenames)
     else:
         # Dataset
         train_data = tf.data.Dataset.from_generator(
-            lambda: train_image_generator.flow_from_dataframe(dataset_df,
-                                                              subset="training",
-                                                              shuffle=True,
-                                                              class_mode='categorical',
-                                                              **common_arg),
+            lambda: train_image_generator.flow_from_dataframe(dataset_df, **train_arg),
             output_types=(tf.float32, tf.float32),
             output_shapes=([run_cfg['batch_size'], run_cfg['image_height'], run_cfg['image_width'], channels],
                            [run_cfg['batch_size'], run_cfg['class_count']])
@@ -347,11 +365,7 @@ def main():
         params['train_images'] = floor(len(dataset_df) * (1 - image_generator_args['validation_split']))
 
         val_data = tf.data.Dataset.from_generator(
-            lambda: train_image_generator.flow_from_dataframe(dataset_df,
-                                                              subset="validation",
-                                                              shuffle=True,
-                                                              class_mode='categorical',
-                                                              **common_arg),
+            lambda: train_image_generator.flow_from_dataframe(dataset_df, **val_arg),
             output_types=(tf.float32, tf.float32),
             output_shapes=([run_cfg['batch_size'], run_cfg['image_height'], run_cfg['image_width'], channels],
                            [run_cfg['batch_size'], run_cfg['class_count']])
@@ -365,10 +379,10 @@ def main():
     # get model function and call it
     method_to_call = getattr(photo_models, run_cfg['function'], None)
     if method_to_call is None:
-        raise ValueError(f"The specified model '{run_cfg['function']} could not be found")
+        error(f"The specified model '{run_cfg['function']} could not be found")
     history = method_to_call(model_args)
 
-    params['duration'] = duration(start, True)
+    params['duration'] = f"{duration(start, True):.1f}"
 
     show_results(history, run_cfg, app_cfg, params)
 
@@ -383,28 +397,7 @@ def show_results(history, run_cfg, app_cfg, params):
         pathlib.Path(results_path).mkdir(parents=True, exist_ok=True)
 
         if run_cfg['show_val_loss'] or run_cfg['save_val_loss']:
-            # Visualize training results
-            # based on code from https://www.tensorflow.org/tutorials/images/classification
-            acc = history.history['accuracy']
-            val_acc = history.history['val_accuracy']
-
-            loss = history.history['loss']
-            val_loss = history.history['val_loss']
-
-            epochs_range = range(history.params['epochs'])
-
-            plt.figure(figsize=(8, 8))
-            plt.subplot(1, 2, 1)
-            plt.plot(epochs_range, acc, label='Training Accuracy')
-            plt.plot(epochs_range, val_acc, label='Validation Accuracy')
-            plt.legend(loc='lower right')
-            plt.title('Training and Validation Accuracy')
-
-            plt.subplot(1, 2, 2)
-            plt.plot(epochs_range, loss, label='Training Loss')
-            plt.plot(epochs_range, val_loss, label='Validation Loss')
-            plt.legend(loc='upper right')
-            plt.title('Training and Validation Loss')
+            acc, val_acc, loss, val_loss = visualise_results(history)
 
             if run_cfg['show_val_loss']:
                 # display val/loss graph
@@ -429,27 +422,55 @@ def show_results(history, run_cfg, app_cfg, params):
                 # save val/loss data to overall results
                 filepath = os.path.join(app_cfg['results_path_root'], f"result_log.csv")
                 print(f"Updating {filepath}")
+
+                keys = sorted(params.keys())
+
                 new_file = not os.path.exists(filepath)
                 with open(filepath, "w" if new_file else "a") as fh:
                     if new_file:
-                        fh.write('model,datetime,accuracy,val_accuracy,loss,val_loss,'
-                                 'image_height,image_width,train_images,val_images,epochs,'
-                                 'duration,'
-                                 'results_folder,dataset_path,photo_path\n')
+                        line_to_write = f'model,datetime,accuracy,val_accuracy,loss,val_loss,' \
+                                        f'{",".join(keys)},results_folder\n'
+                        fh.write(line_to_write)
+
                     last_result = df.iloc[[-1]]
-                    fh.write(f"{run_cfg['name']},{timestamp.strftime('%Y-%m-%d %H:%M')},"
-                             f"{last_result['accuracy'][0]},{last_result['val_accuracy'][0]},"
-                             f"{last_result['loss'][0]},{last_result['val_loss'][0]},"
-                             f"{params['target_size'][0]},{params['target_size'][1]},"
-                             f"{params['train_images']},{params['val_images']},{history.params['epochs']},"
-                             f"{params['duration']},"
-                             f"{results_path},{params['dataset_path']},{params['directory']}\n")
+                    line_to_write = f"{run_cfg['name']},{timestamp.strftime('%Y-%m-%d %H:%M')}," \
+                                    f"{last_result['accuracy'][0]},{last_result['val_accuracy'][0]}," \
+                                    f"{last_result['loss'][0]},{last_result['val_loss'][0]}," \
+                                    f'{",".join([str(params[key]) for key in keys])},{results_path}\n'
+                    fh.write(line_to_write)
 
         if run_cfg['save_summary']:
             filepath = os.path.join(results_path, "summary.txt")
             print(f"Saving {filepath}")
             with open(filepath, "w") as fh:
                 history.model.summary(print_fn=lambda l: fh.write(l + '\n'))
+
+
+def visualise_results(history):
+    # Visualize training results
+    # based on code from https://www.tensorflow.org/tutorials/images/classification
+    acc = history.history['accuracy']
+    val_acc = history.history['val_accuracy']
+
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+
+    epochs_range = range(history.params['epochs'])
+
+    plt.figure(figsize=(8, 8))
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_range, acc, label='Training Accuracy')
+    plt.plot(epochs_range, val_acc, label='Validation Accuracy')
+    plt.legend(loc='lower right')
+    plt.title('Training and Validation Accuracy')
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_range, loss, label='Training Loss')
+    plt.plot(epochs_range, val_loss, label='Validation Loss')
+    plt.legend(loc='upper right')
+    plt.title('Training and Validation Loss')
+
+    return acc, val_acc, loss, val_loss
 
 
 def duration(start, verbose):
@@ -464,11 +485,11 @@ if __name__ == '__main__':
 
 
 # This function will plot images in the form of a grid with 1 row and 5 columns where images are placed in each column.
-def plotImages(images_arr):
-    fig, axes = plt.subplots(1, 5, figsize=(20, 20))
-    axes = axes.flatten()
-    for img, ax in zip(images_arr, axes):
-        ax.imshow(img)
-        ax.axis('off')
-    plt.tight_layout()
-    plt.show()
+# def plotImages(images_arr):
+#     fig, axes = plt.subplots(1, 5, figsize=(20, 20))
+#     axes = axes.flatten()
+#     for img, ax in zip(images_arr, axes):
+#         ax.imshow(img)
+#         ax.axis('off')
+#     plt.tight_layout()
+#     plt.show()

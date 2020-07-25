@@ -87,7 +87,7 @@ def pick_device(dev):
                     device_selection = entry.name
                     fallback = True
 
-    return device_selection, fallback
+    return device_selection, False if dev == 'auto' else fallback
 
 
 def restrict_gpu_mem(num, memory_limit):
