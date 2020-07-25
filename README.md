@@ -17,7 +17,7 @@ Install dependencies via
                   [-ops OUT_PHOTO_SET] [-bp BIZ_PHOTO] [-pf PHOTO_FOLDER]
                   [-oc OUT_CAT] [-obi OUT_BIZ_ID] [-dx DROP_REGEX]
                   [-mx MATCH_REGEX [MATCH_REGEX ...]] [-df {pandas,dask}]
-                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-v]
+                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-cs CSV_SIZE] [-v]
     
     Perform ETL on the Yelp Dataset CSV data to extract the subset of
     businesses/reviews etc. based on a parent category
@@ -99,6 +99,8 @@ Install dependencies via
                             option)
       -li LIMIT_ID, --limit_id LIMIT_ID
                             Limit number of business ids to read
+      -cs CSV_SIZE, --csv_size CSV_SIZE
+                            max csv field size in kB; default 20kB
       -v, --verbose         Verbose mode
   
 #### Example command lines
@@ -201,9 +203,13 @@ The list of business ids will be read from `business_ids.txt`, and the contents 
 
 ##### Generate csv file of checkins for specified business ids
 
-    python3 etl.py -d /path/to -bi business_ids.txt -ci yelp_dataset/yelp_academic_dataset_checkin.csv -oci checkin.csv
+    python3 etl.py -d /path/to -bi business_ids.txt -ci yelp_dataset/yelp_academic_dataset_checkin.csv -oci checkin.csv -cs 400
 
-The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_checkin.csv` are filtered to exclude businesses not in the id list. The remaining checkin counts will be saved to `/path/to/checkin.csv`.
+The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_checkin.csv` are 
+filtered to exclude businesses not in the id list. The remaining checkin counts will be saved to `/path/to/checkin.csv`.
+
+**Note:** As the format of the checkin data may lead to very line lines, it is advised to use the `-cs/--csv_size` 
+option to increase the maximum field size allowed by the csv parser.
 
 ##### Sample use case
 
@@ -225,7 +231,7 @@ Generate the files required for an analysis of restaurants. The required data is
     python3 etl.py -d /path/to -cl categories.txt -b yelp_dataset/yelp_academic_dataset_business.csv -obi business_ids.txt -dx attributes\.HairSpecializesIn.* -ob business.csv
     python3 etl.py -d /path/to -bi business_ids.txt -r yelp_dataset/yelp_academic_dataset_review.csv -or reviews.csv
     python3 etl.py -d /path/to -bi business_ids.txt -t yelp_dataset/yelp_academic_dataset_tip.csv -ot tips.csv
-    python3 etl.py -d /path/to -bi business_ids.txt -ci yelp_dataset/yelp_academic_dataset_checkin.csv -oci checkin.csv
+    python3 etl.py -d /path/to -bi business_ids.txt -ci yelp_dataset/yelp_academic_dataset_checkin.csv -oci checkin.csv -cs 400
     python3 etl.py -d /path/to -bp yelp_dataset/yelp_academic_dataset_business.csv -pi yelp_photos/photos.csv -pf yelp_photos/photos -bi business_ids.txt -ops photo_dataset.csv -mx pin:label=food
 
 ###### All in one

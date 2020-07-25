@@ -289,16 +289,20 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
         'engine': parse_engine,
         'quoting': csv.QUOTE_MINIMAL
     }
-    if df == Df.PANDAS:
-        if 'nrows' in arg_dict:
-            parse_args['nrows'] = arg_dict['nrows']
-        rev_df = pd.read_csv(csv_path, **parse_args)
-    elif df == Df.DASK:
-        if 'nrows' in arg_dict:
-            warning("-nr/--nrows not supported for Dask dataframe")
-        rev_df = dd.read_csv(csv_path, **parse_args)
-    else:
-        raise NotImplemented(f'Unrecognised dataframe type: {df}')
+    try:
+        if df == Df.PANDAS:
+            if 'nrows' in arg_dict:
+                parse_args['nrows'] = arg_dict['nrows']
+            rev_df = pd.read_csv(csv_path, **parse_args)
+        elif df == Df.DASK:
+            if 'nrows' in arg_dict:
+                warning("-nr/--nrows not supported for Dask dataframe")
+            rev_df = dd.read_csv(csv_path, **parse_args)
+        else:
+            raise NotImplemented(f'Unrecognised dataframe type: {df}')
+    except pd.errors.ParserError:
+        error(f"The current max csv field size of {hex(csv.field_size_limit()//0x1000)[2:]}kB is too small. "
+              f"Use the '-cs/--csv_size' option to increase the max csv field size")
 
     print(f"{len(rev_df)} {entity_name} loaded")
 
@@ -768,6 +772,9 @@ if __name__ == "__main__":
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-li', '--limit_id', help="Limit number of business ids to read",
                         type=int, default=argparse.SUPPRESS)
+    parser.add_argument('-cs', '--csv_size',
+                        help=f"max csv field size in kB; default {hex(csv.field_size_limit()//0x1000)[2:]}kB",
+                        type=int, default=csv.field_size_limit())
     parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
     args = parser.parse_args()
@@ -779,6 +786,9 @@ if __name__ == "__main__":
 
     if args.verbose:
         print(f"Arguments: {args}")
+
+    if args.csv_size:
+        csv.field_size_limit(int(str(args.csv_size), 16)*0x1000)    # convert kB to bytes
 
     paths = {'biz': None, 'biz_ids': None, 'biz_photo': None, 'photo_folder': None,
              'cat': None, 'cat_list': None,
