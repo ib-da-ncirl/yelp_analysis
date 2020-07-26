@@ -774,7 +774,7 @@ if __name__ == "__main__":
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-cs', '--csv_size',
                         help=f"max csv field size in kB; default {hex(csv.field_size_limit()//0x1000)[2:]}kB",
-                        type=int, default=csv.field_size_limit())
+                        type=int, default=argparse.SUPPRESS)
     parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
     args = parser.parse_args()
@@ -787,7 +787,7 @@ if __name__ == "__main__":
     if args.verbose:
         print(f"Arguments: {args}")
 
-    if args.csv_size:
+    if 'csv_size' in args:
         csv.field_size_limit(int(str(args.csv_size), 16)*0x1000)    # convert kB to bytes
 
     paths = {'biz': None, 'biz_ids': None, 'biz_photo': None, 'photo_folder': None,
