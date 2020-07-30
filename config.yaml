@@ -12,7 +12,13 @@ results_path_root: ./results
 
 # specify the model to run, the name of an entry in the models list
 #run_model: tf_image_eg
-run_model: tf_image_eg_hflip
+#run_model: tf_image_eg_hflip
+#run_model: inception_v3_eg
+#run_model: inception_v3_eg_hflip
+# or list of models to run
+run_model:
+  - tf_image_eg_hflip
+  - inception_v3_eg_hflip
 
 
 defaults:
@@ -67,19 +73,20 @@ models:
     horizontal_flip: true
     # Int. Degree range for random rotations.
     rotation_range: 45
-    # Float or
-    # TODO [lower, upper]. Range for random zoom.
+    # Float or [lower, upper]. Range for random zoom.
     # If a float, [lower, upper] = [1-zoom_range, 1+zoom_range].
     zoom_range: 0.5
     # Float, 1-D array-like or int
-    # float: fraction of total width, if < 1, or pixels if >= 1. e.g. width_shift_range=0.5 or width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
-    # TODO 1-D array-like: random elements from the array. e.g. width_shift_range=[-1, 0, +1]
-    # int: integer number of pixels from interval (-width_shift_range, +width_shift_range) e.g. width_shift_range=2 possible values are integers [-1, 0, +1]
+    # - float: fraction of total width, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-width_shift_range, +width_shift_range)
+    # - With width_shift_range=2 possible values are integers [-1, 0, +1], same as with width_shift_range=[-1, 0, +1], while with width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
     width_shift_range: 0.15
     # Float, 1-D array-like or int
-    # float: fraction of total height, if < 1, or pixels if >= 1. e.g. height_shift_range=0.5 or height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
-    # TODO 1-D array-like: random elements from the array. e.g. height_shift_range=[-1, 0, +1]
-    # int: integer number of pixels from interval (-height_shift_range, +height_shift_range) e.g. height_shift_range=2 possible values are integers [-1, 0, +1]
+    # - float: fraction of total height, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-height_shift_range, +height_shift_range)
+    # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
     height_shift_range: 0.15
 #    # Float. Shear Intensity (Shear angle in counter-clockwise direction in degrees)
 #    shear_range: 0.0
@@ -96,4 +103,36 @@ models:
 #    # Boolean. Apply ZCA whitening.
 #    zca_whitening: false
 
+  - name: inception_v3_eg
+    desc: Fine-tune InceptionV3 on a new set of classes Tutorial
+    # function from models package to call
+    function: inception_v3_eg
+    show_val_loss: false
+    save_val_loss: true
+    save_summary: true
+    epochs: 15
+
+  - name: inception_v3_eg_hflip
+    desc: Fine-tune InceptionV3 on a new set of classes Tutorial (Augmentation)
+    parent: inception_v3_eg
+
+    # Boolean. Randomly flip inputs horizontally.
+    horizontal_flip: true
+    # Int. Degree range for random rotations.
+    rotation_range: 45
+    # Float or [lower, upper]. Range for random zoom.
+    # If a float, [lower, upper] = [1-zoom_range, 1+zoom_range].
+    zoom_range: [0.5,0.5]
+    # Float, 1-D array-like or int
+    # - float: fraction of total width, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-width_shift_range, +width_shift_range)
+    # - With width_shift_range=2 possible values are integers [-1, 0, +1], same as with width_shift_range=[-1, 0, +1], while with width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
+    width_shift_range: 0.15
+    # Float, 1-D array-like or int
+    # - float: fraction of total height, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-height_shift_range, +height_shift_range)
+    # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
+    height_shift_range: 0.15
 

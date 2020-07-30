@@ -9,6 +9,10 @@ results_path_root: ./results
 
 # specify the model to run, the name of an entry in the models list
 run_model: my_child_model
+# or list of models to run
+#run_model:
+#  - my_model
+#  - my_child_model
 
 defaults:
   # default settings, all may be over written for a particular model by specifying the value in the model config
@@ -63,19 +67,20 @@ models:
     horizontal_flip: true
     # Int. Degree range for random rotations.
     rotation_range: 45
-    # Float or
-    # TODO [lower, upper]. Range for random zoom.
+    # Float or [lower, upper]. Range for random zoom.
     # If a float, [lower, upper] = [1-zoom_range, 1+zoom_range].
     zoom_range: 0.5
     # Float, 1-D array-like or int
-    # float: fraction of total width, if < 1, or pixels if >= 1. e.g. width_shift_range=0.5 or width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
-    # TODO 1-D array-like: random elements from the array. e.g. width_shift_range=[-1, 0, +1]
-    # int: integer number of pixels from interval (-width_shift_range, +width_shift_range) e.g. width_shift_range=2 possible values are integers [-1, 0, +1]
+    # - float: fraction of total width, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-width_shift_range, +width_shift_range)
+    # - With width_shift_range=2 possible values are integers [-1, 0, +1], same as with width_shift_range=[-1, 0, +1], while with width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
     width_shift_range: 0.15
     # Float, 1-D array-like or int
-    # float: fraction of total height, if < 1, or pixels if >= 1. e.g. height_shift_range=0.5 or height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
-    # TODO 1-D array-like: random elements from the array. e.g. height_shift_range=[-1, 0, +1]
-    # int: integer number of pixels from interval (-height_shift_range, +height_shift_range) e.g. height_shift_range=2 possible values are integers [-1, 0, +1]
+    # - float: fraction of total height, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-height_shift_range, +height_shift_range)
+    # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
     height_shift_range: 0.15
     # Float. Shear Intensity (Shear angle in counter-clockwise direction in degrees)
     shear_range: 0.0

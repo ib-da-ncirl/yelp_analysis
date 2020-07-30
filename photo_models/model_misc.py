@@ -51,3 +51,25 @@ def calc_step_size(data: Union[DataFrameIterator, tf.data.Dataset], info: SplitT
         percent = info.val_split if set_name == 'validation' else 1 - info.val_split
         step_size = (info.total * percent) // info.batch
     return step_size
+
+
+def model_fit(model, model_args: ModelArgs, summary=True):
+
+    if summary:
+        model.summary()
+
+    stb = model_args.split_total_batch()
+    step_size_train = calc_step_size(model_args.train_data, stb, 'training')
+    step_size_valid = calc_step_size(model_args.val_data, stb, 'validation')
+
+    # train the model on the new data for a few epochs
+    history = model.fit(
+        model_args.train_data,
+        steps_per_epoch=step_size_train,  # total_train // batch_size,
+        epochs=model_args.epochs,
+        validation_data=model_args.val_data,
+        validation_steps=step_size_valid  # total_val // batch_size
+    )
+
+    return history
+

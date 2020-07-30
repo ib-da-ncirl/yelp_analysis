@@ -19,14 +19,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .tf_image_eg import tf_image_eg
-from .inception_v3 import inception_v3_eg
-from .model_args import ModelArgs
+from .misc import less_dangerous_eval, ArgOptParam, default_or_val
+from .misc_tf import pick_device, restrict_gpu_mem
 
-# Add the names of model functions to this list.
-# Don't forget to import the function above as well
 __all__ = [
-    'ModelArgs',
-    'tf_image_eg',
-    'inception_v3_eg',
+    'less_dangerous_eval',
+    'ArgOptParam',
+    'default_or_val',
+    'pick_device',
+    'restrict_gpu_mem',
 ]
