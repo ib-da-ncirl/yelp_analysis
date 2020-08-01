@@ -37,6 +37,10 @@ import argparse
 from timeit import default_timer as timer
 from enum import Enum
 from PIL import Image
+from pathlib import Path
+from collections import namedtuple
+
+from misc import resize_keep_aspect
 
 MIN_PYTHON = (3, 6)
 if sys.version_info < MIN_PYTHON:
@@ -87,14 +91,17 @@ def check_parent(parent, alias, parent_aliases, exclude_lst):
     return candidate
 
 
-def verify_path(path, typ='file'):
+def verify_path(path, typ='file', create_dir=False):
     exists = os.path.exists(path)
     if typ == 'folder':
+        if not exists and create_dir:
+            Path(path).mkdir(parents=True, exist_ok=True)
+            exists = True
         valid = os.path.isdir(path)
     elif typ == 'file':
         valid = os.path.isfile(path)
     else:
-        raise ValueError(f"Unreckonised 'typ' argument: {typ}")
+        raise ValueError(f"Unrecognised 'typ' argument: {typ}")
     if not exists:
         error(f"'{path}' does not exist")
     if not valid:
@@ -261,8 +268,8 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
             col = arg_dict['regex'][csv_id][0]
             regex = arg_dict['regex'][csv_id][1]
 
-    do_filter_col = (col is not None and regex is not None)     # do col/regex filter
-    do_filter_lambda = (filter_lambda_column is not None and filter_lambda is not None)     # do lambda filter?
+    do_filter_col = (col is not None and regex is not None)  # do col/regex filter
+    do_filter_lambda = (filter_lambda_column is not None and filter_lambda is not None)  # do lambda filter?
 
     # hash ids for faster comparison
     hash_id_list = None
@@ -301,7 +308,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
         else:
             raise NotImplemented(f'Unrecognised dataframe type: {df}')
     except pd.errors.ParserError:
-        error(f"The current max csv field size of {hex(csv.field_size_limit()//0x1000)[2:]}kB is too small. "
+        error(f"The current max csv field size of {hex(csv.field_size_limit() // 0x1000)[2:]}kB is too small. "
               f"Use the '-cs/--csv_size' option to increase the max csv field size")
 
     print(f"{len(rev_df)} {entity_name} loaded")
@@ -349,7 +356,8 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
             if ok:
                 if do_filter_by_id:
                     # filter on ids
-                    ok = (binary_search(hash_id_list, 0, len(hash_id_list) - 1, hash(filter_props[filter_id_column])) >= 0)
+                    ok = (binary_search(hash_id_list, 0, len(hash_id_list) - 1,
+                                        hash(filter_props[filter_id_column])) >= 0)
                 if ex_id:
                     ok = not ok  # exclude id
             nonlocal max_count
@@ -507,7 +515,7 @@ def get_reviews(csv_path, id_lst, out_path, prefilter_path=None, arg_dict=None):
     filter_id_lst = id_lst
     if prefilter_path is not None:
         load_path = prefilter_path  # give pre-filtered input to load_csv()
-        filter_id_lst = None    # no need to filter ids in load_csv()
+        filter_id_lst = None  # no need to filter ids in load_csv()
         biz_iz_idx = -1
 
         # hash ids for faster comparison
@@ -580,7 +588,7 @@ def get_photos(csv_path, id_lst, out_path, arg_dict=None):
     Get the photos for the specified list of business ids
     :param csv_path: Path to checkin csv file
     :param id_lst:  List of business ids
-    :param out_path: Path to save filtered reviews to
+    :param out_path: Path to save filtered photos to
     :param arg_dict: keyword arguments
     :return:
     """
@@ -591,9 +599,46 @@ def get_photos(csv_path, id_lst, out_path, arg_dict=None):
 def progress(cmt, total, current, step=100):
     current += 1
     if current % step == 0 or total == current:
-        percent = "" if total == 0 else f"({current*100/total:.1f}%)"
+        percent = "" if total == 0 else f"({current * 100 / total:.1f}%)"
         print(f"{cmt}: {current} {percent}", flush=True, end='\r' if total > current or total == 0 else '\n')
     return current
+
+
+def img_process(photo, extensions, photo_folder, count, total,
+                get_attrib=False, resize=False, size=None, resize_folder=None):
+    """
+    Process photos
+    :param photo: Image name
+    :param extensions: List of possible extensions
+    :param photo_folder: Folder containing image files
+    :param count: Current processed count
+    :param total: Total number to process
+    :param get_attrib: Get attributes flag
+    :param resize: Resize image flag
+    :param size: Size to resize to
+    :param resize_folder: Folder to save resized images
+    :return:
+    """
+    attrib = None
+    for ext in extensions:
+        filename = f"{photo}{ext}"
+        filepath = os.path.join(photo_folder, filename)
+        if os.path.isfile(filepath):
+            if get_attrib:
+                im = Image.open(filepath)
+                attrib = f"{filename},{im.format},{im.size[0]},{im.size[1]},{im.mode}"
+                im.close()
+            else:
+                attrib = None
+
+            if resize:
+                resize_keep_aspect(filepath, size, resize_folder)
+
+            count = progress("Photo", total, count)
+            break
+    if get_attrib and attrib is None:
+        raise ValueError(f"Unmatched photo id {photo}")
+    return count, attrib
 
 
 def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path, arg_dict=None):
@@ -612,29 +657,33 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
 
     biz_df['stars'] = biz_df['stars'].apply(lambda x: str(x).replace(".", "_"))
 
-    print(f"Processing photo details")
-
+    # process photos
     extensions = Image.registered_extensions().keys()
     count = 0
+    total = len(photo_df)
 
-    def img_attrib(photo):
-        attrib = None
-        for ext in extensions:
-            filename = f"{photo}{ext}"
-            filepath = os.path.join(photo_folder, filename)
-            if os.path.isfile(filepath):
-                im = Image.open(filepath)
-                nonlocal count
-                count = progress("Photo", len(photo_df), count)
-                attrib = f"{filename},{im.format},{im.size[0]},{im.size[1]},{im.mode}"
-                break
-        if attrib is None:
-            raise ValueError(f"Unmatched photo id {photo}")
-        return attrib
+    # process photos details
+    print(f"Processing photo details")
+    resize = ('photo_folder_resize' in arg_dict and 'photo_size' in arg_dict)
+    if resize:
+        print(f"  Including resizing photos to {arg_dict['photo_size']}x{arg_dict['photo_size']}px in "
+              f"{arg_dict['photo_folder_resize']}")
+        Path(arg_dict['photo_folder_resize']).mkdir(parents=True, exist_ok=True)
+
+        def img_attrib(photo):
+            nonlocal count
+            count, attrib = img_process(photo, extensions, photo_folder, count, total, get_attrib=True, resize=True,
+                                        size=arg_dict['photo_size'], resize_folder=arg_dict['photo_folder_resize'])
+            return attrib
+    else:
+        def img_attrib(photo):
+            nonlocal count
+            count, attrib = img_process(photo, extensions, photo_folder, count, total, get_attrib=True)
+            return attrib
 
     photo_df['photo_attrib'] = photo_df['photo_id'].apply(img_attrib)
-    photo_df[['photo_file', 'format', 'width', 'height', 'mode']] = photo_df.apply(
-                lambda row: pd.Series(row['photo_attrib'].split(',')), axis=1)
+    photo_df[['photo_file', 'format', 'width', 'height', 'mode']] = \
+        photo_df.apply(lambda row: pd.Series(row['photo_attrib'].split(',')), axis=1)
 
     progress("Photo", len(photo_df), len(photo_df))
 
@@ -670,6 +719,37 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     print(f"Stars: {len(unique_vals)} class{'' if len(unique_vals) == 1 else 'es'} - {unique_vals}")
 
     save_csv(photo_set_df, out_path, index=False)
+
+
+def resize_photo_set(dataset_csv_path, photo_folder, arg_dict=None):
+    """
+    Generate a csv for the photo dataset
+    :param dataset_csv_path: Path to dataset csv file
+    :param photo_folder: Path to folder containing photos
+    :param arg_dict: keyword arguments
+    :return:
+    """
+
+    photo_set_df, _, start = load_csv('photos', dataset_csv_path, arg_dict=arg_dict)
+
+    print(f"Resizing photos to {arg_dict['photo_size']}x{arg_dict['photo_size']}px in "
+          f"{arg_dict['photo_folder_resize']}")
+
+    Path(arg_dict['photo_folder_resize']).mkdir(parents=True, exist_ok=True)
+
+    # process photos
+    extensions = Image.registered_extensions().keys()
+    count = 0
+    total = len(photo_set_df)
+
+    def img_proc(photo):
+        nonlocal count
+        count, _ = img_process(photo, extensions, photo_folder, count, total, resize=True,
+                               size=arg_dict['photo_size'], resize_folder=arg_dict['photo_folder_resize'])
+
+    photo_set_df['photo_id'].apply(img_proc)
+
+    duration(start, verbose=False if 'verbose' not in arg_dict else arg_dict['verbose'])
 
 
 def file_arg_help(descrip, target='file', action=None):
@@ -723,7 +803,8 @@ if __name__ == "__main__":
     for arg_tuple in [('-r', '--review', 'review'),
                       ('-t', '--tips', 'tips'),
                       ('-ci', '--chkin', 'checkin'),
-                      ('-pi', '--pin', 'photo')]:
+                      ('-pi', '--pin', 'photo'),
+                      ('-psi', '--photo_set_in', 'photo dataset')]:
         parser.add_argument(
             arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]} csv"), default='', required=False
         )
@@ -749,15 +830,21 @@ if __name__ == "__main__":
             default=argparse.SUPPRESS, required=False
         )
     parser.add_argument('-bp', '--biz_photo', type=str, help=file_arg_help("business csv for photo dataset"),
-                        default='')     # just so as not to conflict with mutually exclusive --biz/--biz_ids arguments
-    parser.add_argument('-pf', '--photo_folder', type=str, help=file_arg_help("photo", target='folder'),
-                        default='')
+                        default='')  # just so as not to conflict with mutually exclusive --biz/--biz_ids arguments
     for arg_tuple in [('-oc', '--out_cat', 'category list'),
                       ('-obi', '--out_biz_id', 'business ids')]:
         parser.add_argument(
             arg_tuple[0], arg_tuple[1], type=str, help=file_arg_help(f"{arg_tuple[2]}", action="to create"),
             default=argparse.SUPPRESS, required=False
         )
+    # input folders
+    parser.add_argument('-pf', '--photo_folder', type=str, help=file_arg_help("photo", target='folder'),
+                        default='')
+    # output folders
+    parser.add_argument('-pfr', '--photo_folder_resize', type=str,
+                        help=file_arg_help("resized photos", target='folder'),
+                        default='')
+    # miscellaneous
     parser.add_argument('-dx', '--drop_regex', help='Regex for business csv columns to drop', type=str, default=None)
     parser.add_argument('-mx', '--match_regex', help="Regex for csv columns to match; 'csv_id:column_name=regex'. "
                                                      "Valid 'csv_id' are; 'biz'=business csv file, "
@@ -773,7 +860,10 @@ if __name__ == "__main__":
     parser.add_argument('-li', '--limit_id', help="Limit number of business ids to read",
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-cs', '--csv_size',
-                        help=f"max csv field size in kB; default {hex(csv.field_size_limit()//0x1000)[2:]}kB",
+                        help=f"max csv field size in kB; default {hex(csv.field_size_limit() // 0x1000)[2:]}kB",
+                        type=int, default=argparse.SUPPRESS)
+    parser.add_argument('-ps', '--photo_size',
+                        help=f"required photo size in pixels",
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
@@ -788,29 +878,34 @@ if __name__ == "__main__":
         print(f"Arguments: {args}")
 
     if 'csv_size' in args:
-        csv.field_size_limit(int(str(args.csv_size), 16)*0x1000)    # convert kB to bytes
+        csv.field_size_limit(int(str(args.csv_size), 16) * 0x1000)  # convert kB to bytes
 
-    paths = {'biz': None, 'biz_ids': None, 'biz_photo': None, 'photo_folder': None,
+    paths = {'biz': None, 'biz_ids': None, 'biz_photo': None, 'photo_folder': None, 'photo_folder_resize': None,
              'cat': None, 'cat_list': None,
-             'review': None, 'tips': None, 'chkin': None, 'pin': None,
+             'review': None, 'tips': None, 'chkin': None, 'pin': None, 'photo_set_in': None,
              'out_biz': None, 'out_review': None, 'out_prefilter_review': None,
              'out_tips': None, 'out_chkin': None, 'out_photo': None,
              'out_photo_set': None,
              'out_cat': None, 'out_biz_id': None}
-    ip_arg_tuples = [('biz', args.biz, 'file'), ('biz_ids', args.biz_ids, 'file'),
-                     ('biz_photo', args.biz_photo, 'file'), ('photo_folder', args.photo_folder, 'folder'),
-                     ('cat', args.cat, 'file'), ('cat_list', args.cat_list, 'file')]
+    IpArgDetail = namedtuple('IpArgDetail', ['name', 'value', 'typ', 'create_dir'])
+    ip_arg_tuples = [IpArgDetail('biz', args.biz, 'file', False), IpArgDetail('biz_ids', args.biz_ids, 'file', False),
+                     IpArgDetail('biz_photo', args.biz_photo, 'file', False),
+                     IpArgDetail('photo_folder', args.photo_folder, 'folder', False),
+                     IpArgDetail('photo_folder_resize', args.photo_folder_resize, 'folder', True),
+                     IpArgDetail('cat', args.cat, 'file', False), IpArgDetail('cat_list', args.cat_list, 'file', False)]
     for arg_tuple in ip_arg_tuples:
-        if arg_tuple[0] in args:
-            paths[arg_tuple[0]] = arg_tuple[1]
+        if arg_tuple.name in args:
+            paths[arg_tuple.name] = arg_tuple.value
     for arg_tuple in [('review', args.review),
                       ('tips', args.tips),
                       ('chkin', args.chkin),
-                      ('pin', args.pin)]:
-        if arg_tuple[0] in args:
+                      ('pin', args.pin),
+                      ('photo_set_in', args.photo_set_in)]:
+        if arg_tuple[0] in args and len(arg_tuple[1]):
             paths[arg_tuple[0]] = arg_tuple[1]
     for arg_tuple in [('out_biz', None if 'out_biz' not in args else args.out_biz),
-                      ('out_prefilter_review', None if 'out_prefilter_review' not in args else args.out_prefilter_review),
+                      ('out_prefilter_review',
+                       None if 'out_prefilter_review' not in args else args.out_prefilter_review),
                       ('out_review', None if 'out_review' not in args else args.out_review),
                       ('out_tips', None if 'out_tips' not in args else args.out_tips),
                       ('out_chkin', None if 'out_chkin' not in args else args.out_chkin),
@@ -826,8 +921,8 @@ if __name__ == "__main__":
                 paths[key] = os.path.join(args.dir, val)
 
     for arg_tuple in ip_arg_tuples:
-        if len(arg_tuple[1]) > 0:
-            verify_path(paths[arg_tuple[0]], typ=arg_tuple[2])
+        if len(arg_tuple.value) > 0:
+            verify_path(paths[arg_tuple.name], typ=arg_tuple.typ, create_dir=arg_tuple.create_dir)
 
     kwarg_dict = {'verbose': args.verbose, 'drop_regex': args.drop_regex}
     if args.dataframe is not None:
@@ -852,6 +947,13 @@ if __name__ == "__main__":
                 kwarg_dict['regex'] = {}
             #                   csv_id                [column_name, regex]
             kwarg_dict['regex'][split_file_regex[0]] = splits_col_regex
+    if 'photo_folder_resize' in args or 'photo_size' in args:
+        if ('photo_size' in args and len(args.photo_folder_resize) == 0) or \
+           ('photo_size' not in args and len(args.photo_folder_resize)):
+            arg_error(parser, f"Options -pfr/--photo_folder_resize and -ps/--photo_size are required")
+        if 'photo_size' in args and len(args.photo_folder_resize):
+            kwarg_dict['photo_folder_resize'] = paths['photo_folder_resize']
+            kwarg_dict['photo_size'] = args.photo_size
 
     # load categories
     if len(args.cat_list) > 0:
@@ -886,7 +988,8 @@ if __name__ == "__main__":
     if paths['out_review'] is not None:
         if 'dataframe' not in kwarg_dict:
             kwarg_dict['dataframe'] = Df.DASK
-        get_reviews(paths['review'], biz_id_lst, paths['out_review'], paths['out_prefilter_review'], arg_dict=kwarg_dict)
+        get_reviews(paths['review'], biz_id_lst, paths['out_review'], paths['out_prefilter_review'],
+                    arg_dict=kwarg_dict)
 
     # filter tips
     if paths['out_tips'] is not None:
@@ -904,3 +1007,7 @@ if __name__ == "__main__":
     if paths['out_photo_set'] is not None:
         generate_photo_set(paths['biz_photo'], paths['pin'], biz_id_lst, paths['photo_folder'], paths['out_photo_set'],
                            arg_dict=kwarg_dict)
+
+    # resize photos
+    if paths['photo_set_in'] is not None:
+        resize_photo_set(paths['photo_set_in'], paths['photo_folder'], arg_dict=kwarg_dict)

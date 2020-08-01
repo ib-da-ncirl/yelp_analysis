@@ -7,6 +7,9 @@ modelling_device: auto
 # set maximum memory allocation for gpu in MB
 gpu_memory_limit: 1024
 
+# Set if device placements should be logged; true/false
+tf_log_device_placement: false
+
 # results folder
 results_path_root: ./results
 
@@ -104,16 +107,21 @@ models:
 #    zca_whitening: false
 
   - name: inception_v3_eg
-    desc: Fine-tune InceptionV3 on a new set of classes Tutorial
+    desc: Fine-tune InceptionV3 on a new set of classes
     # function from models package to call
     function: inception_v3_eg
     show_val_loss: false
     save_val_loss: true
     save_summary: true
     epochs: 15
+    # path to the photos folder
+    photo_path: ../project/dataset/yelp_photos/photos299
+    # original InceptionV3 images were 299px x 299px, so resize keeping aspect ratio
+    image_width: 299
+    image_height: 299
 
   - name: inception_v3_eg_hflip
-    desc: Fine-tune InceptionV3 on a new set of classes Tutorial (Augmentation)
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation)
     parent: inception_v3_eg
 
     # Boolean. Randomly flip inputs horizontally.
@@ -122,7 +130,7 @@ models:
     rotation_range: 45
     # Float or [lower, upper]. Range for random zoom.
     # If a float, [lower, upper] = [1-zoom_range, 1+zoom_range].
-    zoom_range: [0.5,0.5]
+    zoom_range: 0.5
     # Float, 1-D array-like or int
     # - float: fraction of total width, if < 1, or pixels if >= 1.
     # - 1-D array-like: random elements from the array.

@@ -22,13 +22,10 @@
 #
 
 import datetime
-import getopt
-import getopt
 import os
 import pathlib
 import re
 import sys
-from collections import namedtuple
 from math import floor
 from timeit import default_timer as timer
 
@@ -39,90 +36,12 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras import Input
 
 import photo_models
-from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, restrict_gpu_mem
-from misc.config_reader import load_yaml
-from misc.get_env import test_file_path, get_file_path
+from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, restrict_gpu_mem, ArgCtrl
 from photo_models import ModelArgs
 
 MIN_PYTHON = (3, 6)
 if sys.version_info < MIN_PYTHON:
     sys.exit("Python %s.%s or later is required.\n" % MIN_PYTHON)
-
-
-def get_config_options():
-    ConfigOpt = namedtuple('ConfigOpt', ['short', 'long', 'desc'])
-    __OPTS = {
-        'h': ConfigOpt('h', 'help', 'Display usage'),
-        'c': ConfigOpt('c:', 'cfg_path=', 'Specify path to configuration script'),
-        'd': ConfigOpt('d:', 'dataset_path=', 'Specify path to the photo dataset csv file'),
-        'p': ConfigOpt('p:', 'photo_path=', 'Specify path to the photos folder'),
-        'm': ConfigOpt('m:', 'modelling_device=', 'TensorFlow preferred modelling device; e.g. /cpu:0'),
-        'r': ConfigOpt('r:', 'run_model=', 'Model to run'),
-        's': ConfigOpt('s:', 'source=', "Model source; 'img' = ImageDataGenerator or 'ds' = Dataset"),
-        'l': ConfigOpt('l:', 'photo_limit=', "Max number of photos to use; 'none' to use all available, or a number"),
-    }
-    return __OPTS
-
-
-def get_short_opts() -> str:
-    opts_lst = ''
-    options = get_config_options()
-    for o_key in options.keys():
-        opts_lst += options[o_key].short
-    return opts_lst
-
-
-def get_long_opts() -> list:
-    opts_lst = []
-    options = get_config_options()
-    for o_key in options.keys():
-        if options[o_key].long is not None:
-            opts_lst.append(options[o_key].long)
-    return opts_lst
-
-
-def get_short_opt(o_key) -> str:
-    short_opt = ''
-    options = get_config_options()
-    if o_key in options.keys():
-        short_opt = '-' + options[o_key].short
-        if short_opt.endswith(':'):
-            short_opt = short_opt[:-1]
-    return short_opt
-
-
-def get_long_opt(o_key) -> str:
-    long_opt = ''
-    options = get_config_options()
-    if o_key in options.keys():
-        long_opt = '--' + options[o_key].long
-        if long_opt.endswith('='):
-            long_opt = long_opt[:-1]
-    return long_opt
-
-
-def usage(name):
-    print(f'Usage: {os.path.basename(name)}')
-    options = get_config_options()
-    lines = []
-    short_len = 0
-    long_len = 0
-    for o_key in options:
-        opt_info = options[o_key]
-        if opt_info.short.endswith(':'):
-            short_opt = opt_info.short[:-1] + ' <value>'
-        else:
-            short_opt = opt_info.short
-        if opt_info.long.endswith('='):
-            long_opt = opt_info.long[:-1] + ' <value>'
-        else:
-            long_opt = opt_info.long
-        short_len = max(short_len, len(short_opt))
-        long_len = max(long_len, len(long_opt))
-        lines.append((short_opt, long_opt, opt_info.desc))
-    for line in lines:
-        print(f' -{line[0]:{short_len}.{short_len}s}|--{line[1]:{long_len}.{long_len}s} : {line[2]}')
-    print()
 
 
 def get_app_config(name: str, args: list):
@@ -133,59 +52,27 @@ def get_app_config(name: str, args: list):
     :param args: command line args
     :return:
     """
-    try:
-        opts, args = getopt.getopt(args, get_short_opts(), get_long_opts())
-    except getopt.GetoptError as err:
-        print(err)
-        usage(name)
-        sys.exit(2)
+    arg_ctrl = ArgCtrl(os.path.basename(name), dflt_config='config.yaml')
+    arg_ctrl.add_option('d', 'dataset_path', 'Specify path to the photo dataset csv file', has_value=True)
+    arg_ctrl.add_option('p', 'photo_path', 'Specify path to the photos folder', has_value=True)
+    arg_ctrl.add_option('m', 'modelling_device', 'TensorFlow preferred modelling device; e.g. /cpu:0', has_value=True)
+    arg_ctrl.add_option('r', 'run_model', 'Model to run', has_value=True)
+    arg_ctrl.add_option('s', 'source', "Model source; 'img' = ImageDataGenerator or 'ds' = Dataset", has_value=True)
+    arg_ctrl.add_option('l', 'photo_limit', "Max number of photos to use; 'none' to use all available, or a number",
+                        has_value=True, type=int)
+    arg_ctrl.add_option('v', 'verbose', 'Verbose mode')
 
-    app_cfg_path = 'config.yaml'  # default in current folder
+    app_cfg = arg_ctrl.get_app_config(args)
 
-    #                dataset_path, photo_path, preferred_device, model, source, limit
-    cmd_line_opts = ['d', 'p', 'm', 'r', 's', 'l']
-    cmd_line_args = {}
-    for opt, arg in opts:
-        if opt == get_short_opt('h') or opt == get_long_opt('h'):
-            usage(name)
-            sys.exit()
-        elif opt == get_short_opt('c') or opt == get_long_opt('c'):
-            app_cfg_path = arg  # use specified config file
-        else:
-            for key in cmd_line_opts:
-                long_opt_name = get_long_opt(key)
-                if opt == get_short_opt(key) or opt == long_opt_name:
-                    long_opt_name = long_opt_name[2:]  # strip leading --
-                    cmd_line_args[long_opt_name] = arg
-                    break
-
-    # get path to config file
-    if not test_file_path(app_cfg_path):
-        # no default so look for in environment or from console
-        app_cfg_path = get_file_path('PHOTO_CFG', 'Photo classification configuration file')
-        if app_cfg_path is None:
-            exit(0)
-
-    # load app config
-    app_cfg = load_yaml(app_cfg_path)
-
-    if app_cfg is not None:
-        # override config from file with command line options
-        for key, val in cmd_line_args.items():
-            if key in ['dataset_path', 'photo_path']:
-                app_cfg['defaults'][key] = val
-            elif key in ['photo_limit']:
-                app_cfg['defaults'][key] = int(val)
-            else:
-                app_cfg[key] = val
-
-        # check some basic configs exist
-        for key in ['defaults', 'run_model']:  # required root level keys
-            if key not in app_cfg.keys():
-                error(f'Missing {key} configuration key')
-    else:
-        error(f'Missing configuration')
-
+    # check some basic configs exist
+    for key in ['defaults', 'run_model']:  # required root level keys
+        if key not in app_cfg.keys():
+            error(f'Missing {key} configuration key')
+    # move command line args to where they should be
+    for key in ['dataset_path', 'photo_path', 'photo_limit']:
+        if key in app_cfg:
+            app_cfg['defaults'][key] = app_cfg[key]
+            app_cfg.pop(key)
     # required default keys
     for key in ['dataset_path', 'photo_path', 'epochs', 'image_width', 'image_height', 'x_col', 'y_col',
                 'color_mode', 'batch_size', 'seed']:
@@ -235,12 +122,14 @@ def load_model_cfg(models: list, run_model: str, run_cfg: dict):
 
 
 def main():
-    tf.debugging.set_log_device_placement(True)
 
     start = timer()
 
     # load app config
     app_cfg = get_app_config(sys.argv[0], sys.argv[1:])
+
+    tf.debugging.set_log_device_placement(False if 'tf_log_device_placement' not in app_cfg
+                                          else app_cfg['tf_log_device_placement'])
 
     if 'gpu_memory_limit' in app_cfg:
         # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
@@ -261,6 +150,8 @@ def main():
         models_run_list = app_cfg['run_model']
 
     for model_to_run in models_run_list:
+
+        tf.keras.backend.clear_session()    # clear keras state
 
         run_cfg = base_cfg.copy()
 
@@ -338,7 +229,10 @@ def main():
             channels = 1
         else:  # 'rgb'/'rgba'
             channels = 3
-        input_shape = (run_cfg['image_height'], run_cfg['image_width'], channels)
+        if tf.keras.backend.image_data_format() == 'channels_last':
+            input_shape = (run_cfg['image_height'], run_cfg['image_width'], channels)
+        else:
+            input_shape = (channels, run_cfg['image_height'], run_cfg['image_width'])
         input_tensor = Input(shape=input_shape)
 
         if 'source' not in app_cfg:
@@ -367,6 +261,9 @@ def main():
                                [run_cfg['batch_size'], run_cfg['class_count']])
             )
             params['val_images'] = floor(len(dataset_df) * image_generator_args['validation_split'])
+
+        if 'verbose' in run_cfg:
+            print(f"{params}")
 
         model_args = ModelArgs(run_cfg['device_name'], input_shape, run_cfg['class_count'],
                                train_data, val_data, run_cfg['epochs'])
@@ -424,7 +321,10 @@ def show_results(history, run_cfg, app_cfg, params):
                 new_file = not os.path.exists(filepath)
                 with open(filepath, "w" if new_file else "a") as fh:
                     if new_file:
-                        line_to_write = f'model,datetime,accuracy,val_accuracy,loss,val_loss,' \
+                        line_to_write = f'model,datetime,' \
+                                        f'accuracy,val_accuracy,' \
+                                        f'loss,val_loss,' \
+                                        f'epochs,' \
                                         f'{",".join(keys)},results_folder\n'
                         fh.write(line_to_write)
 
@@ -432,6 +332,7 @@ def show_results(history, run_cfg, app_cfg, params):
                     line_to_write = f"{run_cfg['name']},{timestamp.strftime('%Y-%m-%d %H:%M')}," \
                                     f"{last_result['accuracy'].iloc[0]},{last_result['val_accuracy'].iloc[0]}," \
                                     f"{last_result['loss'].iloc[0]},{last_result['val_loss'].iloc[0]}," \
+                                    f"{run_cfg['epochs']}," \
                                     f'{",".join([str(params[key]) for key in keys])},{results_path}\n'
                     fh.write(line_to_write)
 
@@ -440,6 +341,9 @@ def show_results(history, run_cfg, app_cfg, params):
             print(f"Saving {filepath}")
             with open(filepath, "w") as fh:
                 history.model.summary(print_fn=lambda l: fh.write(l + '\n'))
+
+                for i, layer in enumerate(history.model.layers):
+                    fh.write(f"{i}\t{layer.name}\n")
 
 
 def visualise_results(history):
@@ -474,7 +378,7 @@ def visualise_results(history):
         plt.subplot(1, ncols, index)
         plt.plot(epochs_range, acc, label='Training Accuracy')
         plt.plot(epochs_range, val_acc, label='Validation Accuracy')
-        plt.legend(loc='lower right')
+        plt.legend(loc='best')
         plt.title('Training and Validation Accuracy')
         index += 1
 
@@ -482,7 +386,7 @@ def visualise_results(history):
         plt.subplot(1, ncols, index)
         plt.plot(epochs_range, loss, label='Training Loss')
         plt.plot(epochs_range, val_loss, label='Validation Loss')
-        plt.legend(loc='upper right')
+        plt.legend(loc='best')
         plt.title('Training and Validation Loss')
         index += 1
 

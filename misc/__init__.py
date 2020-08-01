@@ -21,6 +21,8 @@
 
 from .misc import less_dangerous_eval, ArgOptParam, default_or_val
 from .misc_tf import pick_device, restrict_gpu_mem
+from .arg_ctrl import ArgCtrl
+from .image import resize_keep_aspect
 
 __all__ = [
     'less_dangerous_eval',
@@ -28,4 +30,6 @@ __all__ = [
     'default_or_val',
     'pick_device',
     'restrict_gpu_mem',
+    'ArgCtrl',
+    'resize_keep_aspect',
 ]

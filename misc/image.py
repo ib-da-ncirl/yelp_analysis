@@ -19,33 +19,38 @@
 #  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #  SOFTWARE.
 #
-import string
-from collections import namedtuple
+
+import os
+from PIL import Image, ImageOps
 
 
-def less_dangerous_eval(equation):
+def resize_keep_aspect(path: str, desired_size: int, out_folder: str):
     """
-    Restrict expression that can be evaluated
-    Thanks to https://stackoverflow.com/questions/19959333/convert-a-string-equation-to-an-integer-answer/19959928#19959928
-    :param equation:
-    :return:
+    Resize an image keeping the aspect ratio; resultant image will be 'desired_size' * 'desired_size' pixels
+    :param path: Path to image
+    :param desired_size: New size in pixels
+    :param out_folder: folder to save new image
     """
-    # eval will run whatever it is given, even code, so it is dangerous to expose it to unsanitised input
-    if not set(equation).intersection(string.ascii_letters + '{}[]_;\n'):
-        return eval(equation)
-    else:
-        print("illegal character")
-        return None
+    # Based on https://jdhao.github.io/2017/11/06/resize-image-to-square-with-padding/
 
+    im = Image.open(path)
+    old_size = im.size  # old_size[0] is in (width, height) format
 
-ArgOptParam = namedtuple('ArgOptParam', ['name', 'default'])
+    ratio = float(desired_size) / max(old_size)
+    new_size = tuple([int(x * ratio) for x in old_size])
+    # use thumbnail() or resize() method to resize the input image
 
+    # thumbnail is a in-place operation
 
-def default_or_val(param: ArgOptParam, dictionary: dict):
-    """
-    Get value for key from dictionary or return default
-    :param param: option param
-    :param dictionary: Dict to get value from
-    :return:
-    """
-    return param.default if param.name not in dictionary else dictionary[param.name]
+    # im.thumbnail(new_size, Image.ANTIALIAS)
+
+    im = im.resize(new_size, Image.ANTIALIAS)
+    # create a new image and paste the resized on it
+
+    new_im = Image.new("RGB", (desired_size, desired_size))
+    new_im.paste(im, ((desired_size - new_size[0]) // 2,
+                      (desired_size - new_size[1]) // 2))
+
+    new_im.save(os.path.join(out_folder, os.path.basename(path)))
+    new_im.close()
+

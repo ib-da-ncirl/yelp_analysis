@@ -1,7 +1,21 @@
 # yelp_analysis
 
 1. [etl.py](#etlpy)
-2. [photo_stars.py](#photo_starspy)
+    1. [Installation](#installation)
+    1. [Usage](#usage)
+    1. [Example command lines](#example-command-lines)
+    1. [Generate categories list](#generate-categories-list)
+    1. [Generate business ids list](#generate-business-ids-list)
+    1. [Generate csv file of businesses filtered by specified business ids](generate-csv-file-of-businesses-filtered-by-specified-business-ids)
+    1. [Generate csv file of reviews for specified business ids](generate-csv-file-of-reviews-for-specified-business-ids)
+    1. [Generate csv file of tips for specified business ids](generate-csv-file-of-tips-for-specified-business-ids)
+    1. [Generate csv file of photos for specified business ids](generate-csv-file-of-photos-for-specified-business-ids)
+        1. [Generate resized photos images](generate-resized-photos-images)
+    1. [Generate csv file of checkins for specified business ids](generate-csv-file-of-checkins-for-specified-business-ids)
+    1. [Sample use case](sample-use-case)
+        1. [Step by step](step-by-step)
+        1. [All in one](all-in-one)
+1. [photo_stars.py](#photo_starspy)
 
 ## etl.py
 ### Installation
@@ -11,13 +25,15 @@ Install dependencies via
     
 ### Usage
     usage: etl.py [-h] [-d DIR] [-b BIZ | -bi BIZ_IDS] [-r REVIEW] [-t TIPS]
-                  [-ci CHKIN] [-pi PIN] [-c CAT | -cl CAT_LIST] [-p PARENT]
-                  [-e EXCLUDE] [-ob OUT_BIZ] [-opr OUT_PREFILTER_REVIEW]
-                  [-or OUT_REVIEW] [-ot OUT_TIPS] [-oci OUT_CHKIN] [-op OUT_PHOTO]
-                  [-ops OUT_PHOTO_SET] [-bp BIZ_PHOTO] [-pf PHOTO_FOLDER]
-                  [-oc OUT_CAT] [-obi OUT_BIZ_ID] [-dx DROP_REGEX]
+                  [-ci CHKIN] [-pi PIN] [-psi PHOTO_SET_IN]
+                  [-c CAT | -cl CAT_LIST] [-p PARENT] [-e EXCLUDE] [-ob OUT_BIZ]
+                  [-opr OUT_PREFILTER_REVIEW] [-or OUT_REVIEW] [-ot OUT_TIPS]
+                  [-oci OUT_CHKIN] [-op OUT_PHOTO] [-ops OUT_PHOTO_SET]
+                  [-bp BIZ_PHOTO] [-oc OUT_CAT] [-obi OUT_BIZ_ID]
+                  [-pf PHOTO_FOLDER] [-pfr PHOTO_FOLDER_RESIZE] [-dx DROP_REGEX]
                   [-mx MATCH_REGEX [MATCH_REGEX ...]] [-df {pandas,dask}]
-                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-cs CSV_SIZE] [-v]
+                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-cs CSV_SIZE]
+                  [-ps PHOTO_SIZE] [-v]
     
     Perform ETL on the Yelp Dataset CSV data to extract the subset of
     businesses/reviews etc. based on a parent category
@@ -40,6 +56,9 @@ Install dependencies via
                             'root directory' if argument supplied
       -pi PIN, --pin PIN    Path to photo csv file; absolute or relative to 'root
                             directory' if argument supplied
+      -psi PHOTO_SET_IN, --photo_set_in PHOTO_SET_IN
+                            Path to photo dataset csv file; absolute or relative
+                            to 'root directory' if argument supplied
       -c CAT, --cat CAT     Path to categories json file; absolute or relative to
                             'root directory' if argument supplied
       -cl CAT_LIST, --cat_list CAT_LIST
@@ -74,15 +93,18 @@ Install dependencies via
       -bp BIZ_PHOTO, --biz_photo BIZ_PHOTO
                             Path to business csv for photo dataset file; absolute
                             or relative to 'root directory' if argument supplied
-      -pf PHOTO_FOLDER, --photo_folder PHOTO_FOLDER
-                            Path to photo folder; absolute or relative to 'root
-                            directory' if argument supplied
       -oc OUT_CAT, --out_cat OUT_CAT
                             Path to category list file to create; absolute or
                             relative to 'root directory' if argument supplied
       -obi OUT_BIZ_ID, --out_biz_id OUT_BIZ_ID
                             Path to business ids file to create; absolute or
                             relative to 'root directory' if argument supplied
+      -pf PHOTO_FOLDER, --photo_folder PHOTO_FOLDER
+                            Path to photo folder; absolute or relative to 'root
+                            directory' if argument supplied
+      -pfr PHOTO_FOLDER_RESIZE, --photo_folder_resize PHOTO_FOLDER_RESIZE
+                            Path to resized photos folder; absolute or relative to
+                            'root directory' if argument supplied
       -dx DROP_REGEX, --drop_regex DROP_REGEX
                             Regex for business csv columns to drop
       -mx MATCH_REGEX [MATCH_REGEX ...], --match_regex MATCH_REGEX [MATCH_REGEX ...]
@@ -101,6 +123,8 @@ Install dependencies via
                             Limit number of business ids to read
       -cs CSV_SIZE, --csv_size CSV_SIZE
                             max csv field size in kB; default 20kB
+      -ps PHOTO_SIZE, --photo_size PHOTO_SIZE
+                            required photo size in pixels
       -v, --verbose         Verbose mode
   
 #### Example command lines
@@ -199,7 +223,21 @@ Valid 'csv_id' are:
 
     python3 etl.py -d /path/to -bp yelp_dataset/yelp_academic_dataset_business.csv -pi yelp_photos/photos.csv -pf yelp_photos/photos -bi business_ids.txt -ops photo_dataset.csv -mx pin:label=food
 
-The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_business.csv` are filtered to exclude photos for businesses not in the id list. Similarly, the contents of `photos.csv` are filtered to exclude photos for businesses not in the id list, and of those photos only photos labeled `food` are allowed. The actual photos from the `/path/to/yelp_photos/photos` folder are analysed, and the resultant dataset is saved to `/path/to/photo_dataset.csv`.
+The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_business.csv` are filtered to exclude photos for businesses not in the id list. 
+Similarly, the contents of `photos.csv` are filtered to exclude photos for businesses not in the id list, and of those photos only photos labeled `food` are allowed. The actual photos from the `/path/to/yelp_photos/photos` folder will be analysed, and the resultant dataset will be saved to `/path/to/photo_dataset.csv`.
+
+Additionally, it is possible to resize the photos using the combination of the `-ps/--photo_size` and `-pfr/--photo_folder_resize` options.
+The addition of:
+
+    -ps 299 -pfr yelp_photos/photos299
+    
+to the previous command will save aspect ratio intact 299x299px copies of the photos to the `/path/to/yelp_photos/photos299` folder. 
+
+###### Generate resized photos images 
+
+    python3 etl.py -d /path/to -pf yelp_photos/photos -psi photo_dataset.csv -pfr yelp_photos/photos299 -ps 299
+
+Aspect ratio intact 299x299px copies of the photos from the `/path/to/yelp_photos/photos` folder,will be saved to the `/path/to/yelp_photos/photos299` folder. 
 
 ##### Generate csv file of checkins for specified business ids
 
@@ -241,27 +279,28 @@ Generate the files required for an analysis of restaurants. The required data is
 
 ## photo_stars.py
 ### Installation
-Install dependencies via
+Install dependencies via 
 
     pip3 install -r requirements.txt
     
 ### Usage
     Usage: photo_stars.py
      -h        |--help                     : Display usage
-     -c <value>|--cfg_path <value>         : Specify path to configuration script
+     -c <value>|--config <value>           : Specify path to configuration script
      -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
      -p <value>|--photo_path <value>       : Specify path to the photos folder
      -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
      -r <value>|--run_model <value>        : Model to run
      -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
      -l <value>|--photo_limit <value>      : Max number of photos to use; 'none' to use all available, or a number
+     -v        |--verbose                  : Verbose mode
  
 Any options set in the configuration file will be overwritten by their command line equivalents. 
 
 Specify the model to run using `run_model` in the configuration file, or in the command line using the `-r my_model` option.
 
 If the `show_val_loss`, `save_val_loss` or `save_summary` options are specified, the results of the classification will be saved in the folder specified in the `results_path_root` option in the configuration file.
-For example, with the settings
+For example, with the settings:
 
     # results folder
     results_path_root: ./results
