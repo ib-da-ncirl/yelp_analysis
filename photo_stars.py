@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.python.keras import Input
+from tensorflow.keras import Input
 
 import photo_models
 from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, restrict_gpu_mem, ArgCtrl
@@ -58,6 +58,9 @@ def get_app_config(name: str, args: list):
     arg_ctrl.add_option('m', 'modelling_device', 'TensorFlow preferred modelling device; e.g. /cpu:0', has_value=True)
     arg_ctrl.add_option('r', 'run_model', 'Model to run', has_value=True)
     arg_ctrl.add_option('s', 'source', "Model source; 'img' = ImageDataGenerator or 'ds' = Dataset", has_value=True)
+    arg_ctrl.add_option('b', 'random_batch', "If < 1, percent of available photo to randomly sample, "
+                                             "else number to randomly sample",
+                        has_value=True, type=float)
     arg_ctrl.add_option('l', 'photo_limit', "Max number of photos to use; 'none' to use all available, or a number",
                         has_value=True, type=int)
     arg_ctrl.add_option('v', 'verbose', 'Verbose mode')
@@ -122,7 +125,6 @@ def load_model_cfg(models: list, run_model: str, run_cfg: dict):
 
 
 def main():
-
     start = timer()
 
     # load app config
@@ -149,9 +151,10 @@ def main():
     else:
         models_run_list = app_cfg['run_model']
 
+    model_idx = 0
     for model_to_run in models_run_list:
 
-        tf.keras.backend.clear_session()    # clear keras state
+        tf.keras.backend.clear_session()  # clear keras state
 
         run_cfg = base_cfg.copy()
 
@@ -164,7 +167,10 @@ def main():
 
         run_cfg['rescale'] = less_dangerous_eval(run_cfg['rescale'])
 
-        print(f"Running {run_cfg['desc']}")
+        model_idx += 1
+        print(f"\nRunning {run_cfg['desc']} ({model_idx/len(models_run_list)})")
+        if 'verbose' in app_cfg:
+            print(f"Run config: {run_cfg}")
 
         params = {'dataset_path': run_cfg['dataset_path']}
 
@@ -176,6 +182,13 @@ def main():
             nrows = run_cfg['photo_limit']
 
         dataset_df = pd.read_csv(run_cfg['dataset_path'], nrows=nrows)
+
+        if 'random_batch' in app_cfg:
+            sample_ctrl = {
+                'n': int(app_cfg['random_batch']) if app_cfg['random_batch'] >= 1.0 else None,
+                'frac': app_cfg['random_batch'] if app_cfg['random_batch'] < 1.0 else None
+            }
+            dataset_df = dataset_df.sample(**sample_ctrl, random_state=1)
 
         image_generator_args = {}
         for imgen_arg in [ArgOptParam('featurewise_center', False),
@@ -203,6 +216,7 @@ def main():
                           # preprocessing_function=None
                           ]:
             image_generator_args[imgen_arg.name] = default_or_val(imgen_arg, run_cfg)
+            params[imgen_arg.name] = default_or_val(imgen_arg, run_cfg)
 
         # Data preparation
         # https://keras.io/api/preprocessing/image/#imagedatagenerator-class
@@ -216,7 +230,9 @@ def main():
             'seed': run_cfg['seed'],
             'target_size': (run_cfg['image_height'], run_cfg['image_width']),
         }
-        params.update(common_arg)
+        params.update({key: val for key, val in common_arg.items() if key != 'target_size'})
+        for key in ['image_height', 'image_width']:
+            params[key] = run_cfg[key]
 
         train_arg = common_arg.copy()
         train_arg['subset'] = "training"
@@ -262,18 +278,26 @@ def main():
             )
             params['val_images'] = floor(len(dataset_df) * image_generator_args['validation_split'])
 
-        if 'verbose' in run_cfg:
+        if 'verbose' in app_cfg:
             print(f"{params}")
 
-        model_args = ModelArgs(run_cfg['device_name'], input_shape, run_cfg['class_count'],
-                               train_data, val_data, run_cfg['epochs'])
+        misc_args = {}
+        for misc in ['gsap_units', 'gsap_activation', 'log_activation', 'run1_optimizer', 'run2_optimizer',
+                     'run2_inceptions_to_train', 'run2_train_bn']:
+            if misc in run_cfg:
+                misc_args[misc] = run_cfg[misc]
+
+        model_args = ModelArgs(run_cfg['device_name'], input_shape, input_tensor, run_cfg['class_count'],
+                               train_data, val_data, run_cfg['epochs'], misc_args=misc_args)
         model_args.set_split_total_batch(run_cfg['validation_split'], len(dataset_df), run_cfg['batch_size'])
+
+        params['misc_args'] = misc_args
 
         # get model function and call it
         method_to_call = getattr(photo_models, run_cfg['function'], None)
         if method_to_call is None:
             error(f"The specified model '{run_cfg['function']} could not be found")
-        history = method_to_call(model_args)
+        history = method_to_call(model_args, verbose=('verbose' in app_cfg))
 
         params['duration'] = f"{duration(start, True):.1f}"
 
@@ -316,7 +340,15 @@ def show_results(history, run_cfg, app_cfg, params):
                 filepath = os.path.join(app_cfg['results_path_root'], f"result_log.csv")
                 print(f"Updating {filepath}")
 
+                def expand_param(param_dict, sep):
+                    param_dict_keys = sorted(param_dict.keys())
+                    return sep.join([f"{key2}={str(param_dict[key2])}"
+                                     if not isinstance(param_dict[key2], dict)
+                                     else expand_param(param_dict[key2], sep[0] * (len(sep) + 1))
+                                     for key2 in param_dict_keys])
+
                 keys = sorted(params.keys())
+                params_string = f'{",".join([str(params[key]) if not isinstance(params[key], dict) else expand_param(params[key], ";") for key in keys])}'
 
                 new_file = not os.path.exists(filepath)
                 with open(filepath, "w" if new_file else "a") as fh:
@@ -333,7 +365,7 @@ def show_results(history, run_cfg, app_cfg, params):
                                     f"{last_result['accuracy'].iloc[0]},{last_result['val_accuracy'].iloc[0]}," \
                                     f"{last_result['loss'].iloc[0]},{last_result['val_loss'].iloc[0]}," \
                                     f"{run_cfg['epochs']}," \
-                                    f'{",".join([str(params[key]) for key in keys])},{results_path}\n'
+                                    f'{params_string},' f'{results_path}\n'
                     fh.write(line_to_write)
 
         if run_cfg['save_summary']:
@@ -402,7 +434,6 @@ def duration(start, verbose):
 
 if __name__ == '__main__':
     main()
-
 
 # This function will plot images in the form of a grid with 1 row and 5 columns where images are placed in each column.
 # def plotImages(images_arr):

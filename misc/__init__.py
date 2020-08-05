@@ -20,7 +20,7 @@
 # SOFTWARE.
 
 from .misc import less_dangerous_eval, ArgOptParam, default_or_val
-from .misc_tf import pick_device, restrict_gpu_mem
+from .misc_tf import pick_device, restrict_gpu_mem, get_optimiser
 from .arg_ctrl import ArgCtrl
 from .image import resize_keep_aspect
 
@@ -30,6 +30,7 @@ __all__ = [
     'default_or_val',
     'pick_device',
     'restrict_gpu_mem',
+    'get_optimiser',
     'ArgCtrl',
     'resize_keep_aspect',
 ]

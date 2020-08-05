@@ -2,15 +2,15 @@
 # https://www.tensorflow.org/tutorials/images/classification
 # and adapted for use here.
 #
-from photo_models.model_args import ModelArgs
 import tensorflow as tf
+from tensorflow.keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Conv2D, Flatten, Dropout, MaxPooling2D, GlobalAveragePooling2D
 
+from photo_models.model_args import ModelArgs
 from photo_models.model_misc import calc_step_size
 
 
-def tf_image_eg(model_args: ModelArgs):
+def tf_image_eg(model_args: ModelArgs, verbose: bool = False):
     # The model consists of three convolution blocks with a max pool layer in each of them.
     # There's a fully connected layer with 512 units on top of it that is activated by a relu activation function
     model = Sequential([

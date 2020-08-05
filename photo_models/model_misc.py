@@ -53,9 +53,9 @@ def calc_step_size(data: Union[DataFrameIterator, tf.data.Dataset], info: SplitT
     return step_size
 
 
-def model_fit(model, model_args: ModelArgs, summary=True):
+def model_fit(model, model_args: ModelArgs, verbose: bool = False):
 
-    if summary:
+    if verbose:
         model.summary()
 
     stb = model_args.split_total_batch()
@@ -72,4 +72,3 @@ def model_fit(model, model_args: ModelArgs, summary=True):
     )
 
     return history
-

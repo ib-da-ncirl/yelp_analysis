@@ -18,10 +18,43 @@ results_path_root: ./results
 #run_model: tf_image_eg_hflip
 #run_model: inception_v3_eg
 #run_model: inception_v3_eg_hflip
+#run_model: inception_v3_eg_hflip_v2
+#run_model: alexnet
+#run_model: xception_eg
 # or list of models to run
-run_model:
-  - tf_image_eg_hflip
-  - inception_v3_eg_hflip
+#run_model:
+#  - tf_image_eg_hflip
+#  - inception_v3_eg_hflip
+#run_model:
+#  - inception_v3_eg_hflip_v2
+#  - inception_v3_eg_hflip_v2_1
+#  - inception_v3_eg_hflip_v2_2
+#  - inception_v3_eg_hflip_v2_3
+#  - inception_v3_eg_hflip_v2_4
+#  - inception_v3_eg_hflip_v2_5
+#  - inception_v3_eg_hflip_v2_6
+#  - inception_v3_eg_hflip_v2_7
+#  - inception_v3_eg_hflip_v2_8
+#  - inception_v3_eg_hflip_v2_9
+#  - inception_v3_eg_hflip_v2_10
+#  - inception_v3_eg_hflip_v2_11
+#  - inception_v3_eg_hflip_v2_12
+#  - inception_v3_eg_hflip_v2_13
+#  - inception_v3_eg_hflip_v2_14
+#  - inception_v3_eg_hflip_v2_15
+#  - inception_v3_eg_hflip_v2_16
+#  - inception_v3_eg_hflip_v2_17
+#  - inception_v3_eg_hflip_v2_18
+#  - inception_v3_eg_hflip_v2_19
+#  - inception_v3_eg_hflip_v2_20
+#  - inception_v3_eg_hflip_v2_21
+#  - inception_v3_eg_hflip_v2_22
+#  - inception_v3_eg_hflip_v2_23
+#  - inception_v3_eg_hflip_v2_24
+#  - inception_v3_eg_hflip_v2_25  # can only run on its own not enough memory during training run 2
+                                  # GeForce GTX 1050 2GB
+
+run_model: inception_v3_eg_hflip_v2_9
 
 
 defaults:
@@ -59,6 +92,10 @@ defaults:
   # Note: eval() is used to evaluate if a string expression is supplied; e.g. '1./255.' = 0.00392156862745098
   rescale: 1./255.
 
+  show_val_loss: false
+  save_val_loss: true
+  save_summary: true
+
 models:
   - name: tf_image_eg
     desc: TensorFlow Image Classification Tutorial
@@ -67,7 +104,7 @@ models:
     show_val_loss: false
     save_val_loss: true
     save_summary: true
-    epochs: 15
+#    epochs: 15
   - name: tf_image_eg_hflip
     desc: TensorFlow Image Classification Tutorial (Augmentation)
     parent: tf_image_eg
@@ -106,6 +143,8 @@ models:
 #    # Boolean. Apply ZCA whitening.
 #    zca_whitening: false
 
+    # InceptionV3
+    # -----------
   - name: inception_v3_eg
     desc: Fine-tune InceptionV3 on a new set of classes
     # function from models package to call
@@ -113,10 +152,10 @@ models:
     show_val_loss: false
     save_val_loss: true
     save_summary: true
-    epochs: 15
+#    epochs: 15
     # path to the photos folder
     photo_path: ../project/dataset/yelp_photos/photos299
-    # original InceptionV3 images were 299px x 299px, so resize keeping aspect ratio
+    # original InceptionV3 images were 299px x 299px, so use resized copies keeping aspect ratio
     image_width: 299
     image_height: 299
 
@@ -143,4 +182,337 @@ models:
     # - int: integer number of pixels from interval (-height_shift_range, +height_shift_range)
     # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
     height_shift_range: 0.15
+
+  - name: inception_v3_eg_hflip_v2
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2
+    parent: inception_v3_eg_hflip
+    # function from models package to call
+    function: inception_v3_eg_v2
+
+    # Boolean. Randomly flip inputs horizontally.
+    horizontal_flip: true
+    # Int. Degree range for random rotations.
+    rotation_range: 45
+    # Float or [lower, upper]. Range for random zoom.
+    # If a float, [lower, upper] = [1-zoom_range, 1+zoom_range].
+    zoom_range: 0.5
+    # Float, 1-D array-like or int
+    # - float: fraction of total width, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-width_shift_range, +width_shift_range)
+    # - With width_shift_range=2 possible values are integers [-1, 0, +1], same as with width_shift_range=[-1, 0, +1], while with width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
+    width_shift_range: 0.15
+    # Float, 1-D array-like or int
+    # - float: fraction of total height, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-height_shift_range, +height_shift_range)
+    # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
+    height_shift_range: 0.15
+
+#    epochs: 1
+
+    # global spatial average pooling layer
+    gsap_units: 1024
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: relu
+
+    # logistic layer
+    log_activation: softmax
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: rmsprop
+
+    # training run 2 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run2_optimizer:
+      name: sgd
+      lr: 0.0001
+      momentum: 0.9
+
+    # training run 2 number of inception from top to train, e.g. 2 is top 2
+    run2_inceptions_to_train: 2
+
+  - name: inception_v3_eg_hflip_v2_1
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.1
+    parent: inception_v3_eg_hflip_v2
+
+    # Boolean. Randomly flip inputs vertically.
+    vertical_flip: true
+    # Int. Degree range for random rotations.
+    rotation_range: 90
+    # Float or [lower, upper]. Range for random zoom.
+    # If a float, [lower, upper] = [1-zoom_range, 1+zoom_range].
+    zoom_range: 0.25
+    # Float, 1-D array-like or int
+    # - float: fraction of total width, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-width_shift_range, +width_shift_range)
+    # - With width_shift_range=2 possible values are integers [-1, 0, +1], same as with width_shift_range=[-1, 0, +1], while with width_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0)
+    width_shift_range: 0.05
+    # Float, 1-D array-like or int
+    # - float: fraction of total height, if < 1, or pixels if >= 1.
+    # - 1-D array-like: random elements from the array.
+    # - int: integer number of pixels from interval (-height_shift_range, +height_shift_range)
+    # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
+    height_shift_range: 0.05
+
+  - name: inception_v3_eg_hflip_v2_2
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.2
+    parent: inception_v3_eg_hflip_v2
+
+    # global spatial average pooling layer
+    gsap_units: 512
+
+  - name: inception_v3_eg_hflip_v2_3
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.3
+    parent: inception_v3_eg_hflip_v2
+
+    # global spatial average pooling layer
+    gsap_units: 256
+
+  - name: inception_v3_eg_hflip_v2_4
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.4
+    parent: inception_v3_eg_hflip_v2
+
+    # global spatial average pooling layer
+    gsap_units: 128
+
+  - name: inception_v3_eg_hflip_v2_5
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.5
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # see https://www.tensorflow.org/api_docs/python/tf/keras/activations
+    gsap_activation: elu
+
+  - name: inception_v3_eg_hflip_v2_6
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.6
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: exponential
+
+  - name: inception_v3_eg_hflip_v2_7
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.7
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: hard_sigmoid
+
+  - name: inception_v3_eg_hflip_v2_8
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.8
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: linear
+
+  - name: inception_v3_eg_hflip_v2_9
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.9
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: selu
+
+  - name: inception_v3_eg_hflip_v2_10
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.10
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: sigmoid
+
+  - name: inception_v3_eg_hflip_v2_11
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.11
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: softmax
+
+  - name: inception_v3_eg_hflip_v2_12
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.12
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: softplus
+
+  - name: inception_v3_eg_hflip_v2_13
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.13
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: softsign
+
+  - name: inception_v3_eg_hflip_v2_14
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.14
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: swish
+
+  - name: inception_v3_eg_hflip_v2_15
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.15
+    parent: inception_v3_eg_hflip_v2
+
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: tanh
+
+  - name: inception_v3_eg_hflip_v2_16
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.16
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: adadelta
+
+  - name: inception_v3_eg_hflip_v2_17
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.17
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: adagrad
+
+  - name: inception_v3_eg_hflip_v2_18
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.18
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: adam
+
+  - name: inception_v3_eg_hflip_v2_19
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.19
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: adamax
+
+  - name: inception_v3_eg_hflip_v2_20
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.20
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: ftrl
+
+  - name: inception_v3_eg_hflip_v2_21
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.21
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: nadam
+
+  - name: inception_v3_eg_hflip_v2_22
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.22
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: sgd
+
+  - name: inception_v3_eg_hflip_v2_23
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.23
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 2 number of inception from top to train, e.g. 2 is top 2
+    run2_inceptions_to_train: 3
+
+  - name: inception_v3_eg_hflip_v2_24
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.24
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 2 number of inception from top to train, e.g. 2 is top 2
+    run2_inceptions_to_train: 4
+
+  - name: inception_v3_eg_hflip_v2_25
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.25
+    parent: inception_v3_eg_hflip_v2
+
+    # training run 2 number of inception from top to train, e.g. 2 is top 2
+    run2_inceptions_to_train: 5
+
+
+    # ResNet50
+    # --------
+  - name: resnet50_eg
+    desc: Fine-tune ResNet50 on a new set of classes
+    # function from models package to call
+    function: resnet50_eg
+    photo_path: ../project/dataset/yelp_photos/photos224
+    # original ResNet images were 224px x 224px, so use resized copies keeping aspect ratio
+    image_width: 224
+    image_height: 224
+
+    epochs: 1
+
+    # global spatial average pooling layer
+    gsap_units: 1024
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: relu
+
+    # logistic layer
+    log_activation: softmax
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: rmsprop
+
+    # training run 2 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run2_optimizer:
+      name: sgd
+      lr: 0.0001
+      momentum: 0.9
+
+    # training run 2, train BatchNormalization layers in base model
+    run2_train_bn: true
+
+    # AlexNet50
+    # --------
+  - name: alexnet
+    desc: Single GP AlexNet
+    # function from models package to call
+    function: alexnet
+    photo_path: ../project/dataset/yelp_photos/photos224
+    # original ResNet images were 224px x 224px, so use resized copies keeping aspect ratio
+    image_width: 224
+    image_height: 224
+
+#    epochs: 15
+
+    # global spatial average pooling layer
+    gsap_units: 1024
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: relu
+
+    # logistic layer
+    log_activation: softmax
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: rmsprop
+
+
+    # Xception
+    # --------
+  - name: xception_eg
+    desc: Fine-tune Xception on a new set of classes
+    # function from models package to call
+    function: xception_eg
+    photo_path: ../project/dataset/yelp_photos/photos299
+    # original ResNet images were 299px x 299px, so use resized copies keeping aspect ratio
+    image_width: 299
+    image_height: 299
+
+    epochs: 1
+
+    # global spatial average pooling layer
+    gsap_units: 512
+    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    gsap_activation: relu
+
+    # logistic layer
+    log_activation: softmax
+
+    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run1_optimizer: rmsprop
+
+    # training run 2 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    run2_optimizer:
+      name: sgd
+      lr: 0.0001
+      momentum: 0.9
+
+
+
 

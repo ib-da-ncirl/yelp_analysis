@@ -20,7 +20,10 @@
 # SOFTWARE.
 
 from .tf_image_eg import tf_image_eg
-from .inception_v3 import inception_v3_eg
+from .inception_v3 import inception_v3_eg, inception_v3_eg_v2
+from .resnet50 import resnet50_eg
+from .alexnet import alexnet
+from .xception import xception_eg
 from .model_args import ModelArgs
 
 # Add the names of model functions to this list.
@@ -29,4 +32,8 @@ __all__ = [
     'ModelArgs',
     'tf_image_eg',
     'inception_v3_eg',
+    'inception_v3_eg_v2',
+    'resnet50_eg',
+    'alexnet',
+    'xception_eg',
 ]

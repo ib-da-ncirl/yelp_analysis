@@ -27,6 +27,7 @@ A collections of miscellaneous TensorFlow related functions
 import re
 from collections import namedtuple
 import tensorflow as tf
+from tensorflow.keras.optimizers import Adadelta, Adagrad, Adam, Adamax, Ftrl, Nadam, RMSprop, SGD
 from tensorflow.python.client import device_lib
 
 DeviceDetail = namedtuple('DeviceDetail', ['name', 'type', 'num', 'mem'])
@@ -133,3 +134,36 @@ def set_memory_growth(enable):
             # Memory growth must be set before GPUs have been initialized
             print(e)
 
+
+def get_optimiser(setting):
+
+    # 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # or a dict with 'name' and other args
+    if isinstance(setting, str):
+        optimiser = setting     # just return the name and let keras handle the rest
+    elif isinstance(setting, dict):
+        # need to instantiate
+        name = setting['name'].lower()
+        args = {key: val for key, val in setting.items() if key != 'name'}
+        if name == 'adadelta':
+            optimiser = Adadelta(**args)
+        elif name == 'adagrad':
+            optimiser = Adagrad(**args)
+        elif name == 'adam':
+            optimiser = Adam(**args)
+        elif name == 'adamax':
+            optimiser = Adamax(**args)
+        elif name == 'ftrl':
+            optimiser = Ftrl(**args)
+        elif name == 'nadam':
+            optimiser = Nadam(**args)
+        elif name == 'rmsprop':
+            optimiser = RMSprop(**args)
+        elif name == 'sgd':
+            optimiser = SGD(**args)
+        else:
+            raise ValueError(f"Unknown optimiser: {setting['name']}")
+    else:
+        raise ValueError(f"Unknown value for setting: {setting}")
+
+    return optimiser

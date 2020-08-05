@@ -24,32 +24,37 @@ from collections import namedtuple
 
 from keras_preprocessing.image import DataFrameIterator
 import tensorflow as tf
-
+from tensorflow.keras import Input
 
 SplitTotalBatch = namedtuple('SplitTotalBatch', ['val_split', 'total', 'batch'])
 
 
 class ModelArgs:
 
-    def __init__(self, device_name: str, input_shape: tuple, class_count: int,
+    def __init__(self, device_name: str, input_shape: tuple, input_tensor: Input, class_count: int,
                  train_data: Union[DataFrameIterator, tf.data.Dataset],
                  val_data: Union[DataFrameIterator, tf.data.Dataset],
-                 epochs: int):
+                 epochs: int, misc_args=None):
         """
         Initialise this object
         :param device_name: TF device name to use
         :param input_shape: Shape of input images
+        :param input_tensor: Input tensor
         :param class_count: Number of classification classes
         :param train_data: Training data
         :param val_data: Validation data
         :param epochs: Number of epochs
         """
+        if misc_args is None:
+            misc_args = {}
         self._device_name = device_name
         self._input_shape = input_shape
+        self._input_tensor = input_tensor
         self._class_count = class_count
         self._train_data = train_data
         self._val_data = val_data
         self._epochs = epochs
+        self._misc_args = misc_args
         self._validation_split = 0.0
         self._total = 0
         self._batch_size = 0
@@ -69,6 +74,14 @@ class ModelArgs:
     @input_shape.setter
     def input_shape(self, input_shape: tuple):
         self._input_shape = input_shape
+
+    @property
+    def input_tensor(self) -> Input:
+        return self._input_tensor
+
+    @input_tensor.setter
+    def input_tensor(self, input_tensor: Input):
+        self._input_tensor = input_tensor
 
     @property
     def class_count(self) -> int:
@@ -103,6 +116,14 @@ class ModelArgs:
         self._epochs = epochs
 
     @property
+    def misc_args(self) -> dict:
+        return self._misc_args
+
+    @misc_args.setter
+    def misc_args(self, misc_args: dict):
+        self._misc_args = misc_args
+
+    @property
     def validation_split(self) -> float:
         return self._validation_split
 
@@ -133,4 +154,3 @@ class ModelArgs:
 
     def split_total_batch(self) -> SplitTotalBatch:
         return SplitTotalBatch(self._validation_split, self._total, self._batch_size)
-

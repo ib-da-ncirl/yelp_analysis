@@ -9,11 +9,86 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 import tensorflow as tf
 
+from misc import get_optimiser
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
 
-def inception_v3_eg(model_args: ModelArgs):
+def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
+
+    # create the base pre-trained model
+    # https://keras.io/api/applications/inceptionv3/
+    base_model = InceptionV3(weights='imagenet', include_top=False,
+                             classes=model_args.class_count,
+                             input_shape=model_args.input_shape)
+
+    # freeze the base model
+    base_model.trainable = False
+
+    # add a global spatial average pooling layer
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    # let's add a fully-connected layer
+    x = Dense(model_args.misc_args['gsap_units'], activation=model_args.misc_args['gsap_activation'])(x)
+    # and a logistic layer
+    predictions = Dense(model_args.class_count, activation=model_args.misc_args['log_activation'])(x)
+
+    # this is the model we will train
+    model = Model(inputs=base_model.input, outputs=predictions)
+
+    # first: train only the top layers (which were randomly initialized)
+    # i.e. freeze all convolutional InceptionV3 layers
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    with tf.device(model_args.device_name):
+
+        # training run 1
+        # compile the model (should be done *after* setting layers to non-trainable)
+        model.compile(optimizer=get_optimiser(model_args.misc_args['run1_optimizer']),
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
+
+        # train the model on the new data for a few epochs
+        model_fit(model, model_args, verbose=verbose)
+
+        # at this point, the top layers are well trained and we can start fine-tuning
+        # convolutional layers from inception V3. We will freeze the bottom N layers
+        # and train the remaining top layers.
+
+        blocks = []
+        # keras uses the names 'mixed<num>' for the inception blocks
+        for i, layer in enumerate(base_model.layers):
+            match = re.match(r"^mixed(\d+)$", layer.name)
+            if match:
+                blocks.append((i, int(match.group(1))))
+        # we chose to train the top inception blocks, i.e. we will freeze
+        # the layers associated with the first blocks and unfreeze the rest:
+        num_to_train = model_args.misc_args['run2_inceptions_to_train']
+        if num_to_train + 1 > len(blocks):
+            raise ValueError(f"Inception blocks to train ({num_to_train}) exceeds number of blocks ({len(blocks)})")
+        freeze_below = blocks[-num_to_train - 1][0] + 1
+        if verbose:
+            print(f"Training top {num_to_train} inception blocks, freeze below layer {freeze_below}")
+
+        for layer in model.layers[:freeze_below]:
+            layer.trainable = False
+        for layer in model.layers[freeze_below:]:
+            layer.trainable = True
+
+        # training run 2
+        # we need to recompile the model for these modifications to take effect
+        model.compile(optimizer=get_optimiser(model_args.misc_args['run2_optimizer']),
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
+
+        # we train our model again (this time fine-tuning the top inception blocks
+        # alongside the top Dense layers
+
+    return model_fit(model, model_args, verbose=verbose)
+
+
+def inception_v3_eg(model_args: ModelArgs, verbose: bool = False):
 
     # create the base pre-trained model
     # https://keras.io/api/applications/inceptionv3/
@@ -44,7 +119,7 @@ def inception_v3_eg(model_args: ModelArgs):
                       metrics=['accuracy'])
 
         # train the model on the new data for a few epochs
-        model_fit(model, model_args)
+        model_fit(model, model_args, verbose=verbose)
 
         # at this point, the top layers are well trained and we can start fine-tuning
         # convolutional layers from inception V3. We will freeze the bottom N layers
@@ -88,4 +163,6 @@ def inception_v3_eg(model_args: ModelArgs):
         #     validation_steps=step_size_valid  # total_val // batch_size
         # )
 
-    return model_fit(model, model_args)
+    return model_fit(model, model_args, verbose=verbose)
+
+
