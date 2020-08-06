@@ -310,6 +310,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
     except pd.errors.ParserError:
         error(f"The current max csv field size of {hex(csv.field_size_limit() // 0x1000)[2:]}kB is too small. "
               f"Use the '-cs/--csv_size' option to increase the max csv field size")
+        rev_df = None
 
     print(f"{len(rev_df)} {entity_name} loaded")
 
@@ -323,7 +324,7 @@ def load_csv(entity_name, csv_path, dtype=None, converters=None, out_path=None,
             cmts.append(f"'{col}' column")
 
             def col_val_fxn(mcol):
-                return re.search(regex, mcol)
+                return True if re.search(regex, mcol) else False
         else:
             def col_val_fxn(mcol):
                 return True
@@ -641,7 +642,7 @@ def img_process(photo, extensions, photo_folder, count, total,
     return count, attrib
 
 
-def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path, arg_dict=None):
+def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path, save_ids_path=None, arg_dict=None):
     """
     Generate a csv for the photo dataset
     :param biz_path: Path to business csv file
@@ -649,6 +650,7 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     :param id_lst:  List of business ids
     :param photo_folder: Path to folder containing photos
     :param out_path: Path to save dataset to
+    :param save_ids_path: File to save business id list to
     :param arg_dict: keyword arguments
     :return:
     """
@@ -657,10 +659,46 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
 
     biz_df['stars'] = biz_df['stars'].apply(lambda x: str(x).replace(".", "_"))
 
+    # many-to-one join, i.e many photos to one business id
+    biz_photo_df = pd.merge(photo_df, biz_df, on='business_id', how='outer')
+
+    # drop rows with no photo id, no photo no prediction
+    total = len(biz_photo_df)
+    biz_photo_df = biz_photo_df[~biz_photo_df['photo_id'].isna()]
+
+    if total > len(biz_photo_df):
+        print(f"Dropped {total - len(biz_photo_df)} businesses with no photos")
+
+    if 'random_select' in arg_dict:
+        sample_ctrl = {
+            'n': int(arg_dict['random_select']) if arg_dict['random_select'] >= 1.0 else None,
+            'frac': arg_dict['random_select'] if arg_dict['random_select'] < 1.0 else None
+        }
+        pre_sample_len = len(biz_photo_df)
+        if arg_dict['select_on'].lower() == 'all':
+            # do sample on all photos available
+            biz_photo_df = biz_photo_df.sample(**sample_ctrl, random_state=1)
+
+            print(f"Sampled {len(biz_photo_df)} from {pre_sample_len} possible photos")
+        else:
+            # do sample on unique values of specified column
+            # make sorted list of hashed unique samples
+            unique_biz_ids = pd.Series(biz_photo_df[arg_dict['select_on']].unique())
+            vals_to_match = sorted(unique_biz_ids.
+                                   sample(**sample_ctrl, random_state=1).apply(hash).to_list())
+
+            def is_req(row):
+                return binary_search(vals_to_match, 0, len(vals_to_match) - 1, hash(row)) >= 0
+
+            biz_photo_df = biz_photo_df[biz_photo_df[arg_dict['select_on']].apply(is_req)]
+
+            print(f"Sampled {len(vals_to_match)} from {len(unique_biz_ids)} "
+                  f"possible {arg_dict['select_on']}, giving {len(biz_photo_df)} photos")
+
     # process photos
     extensions = Image.registered_extensions().keys()
     count = 0
-    total = len(photo_df)
+    total = len(biz_photo_df)
 
     # process photos details
     print(f"Processing photo details")
@@ -681,28 +719,17 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
             count, attrib = img_process(photo, extensions, photo_folder, count, total, get_attrib=True)
             return attrib
 
-    photo_df['photo_attrib'] = photo_df['photo_id'].apply(img_attrib)
-    photo_df[['photo_file', 'format', 'width', 'height', 'mode']] = \
-        photo_df.apply(lambda row: pd.Series(row['photo_attrib'].split(',')), axis=1)
+    biz_photo_df['photo_attrib'] = biz_photo_df['photo_id'].apply(img_attrib)
+    biz_photo_df[['photo_file', 'format', 'width', 'height', 'mode']] = \
+        biz_photo_df.apply(lambda row: pd.Series(row['photo_attrib'].split(',')), axis=1, result_type='expand')
 
-    progress("Photo", len(photo_df), len(photo_df))
+    biz_photo_df['width'] = biz_photo_df['width'].astype('int32')
+    biz_photo_df['height'] = biz_photo_df['height'].astype('int32')
 
-    # many-to-one join, i.e many photos to one business id
-    biz_photo_df = pd.merge(photo_df, biz_df, on='business_id', how='outer')
+    progress("Photo", len(biz_photo_df), len(biz_photo_df))
 
     # just keep required columns
     photo_set_df = biz_photo_df[['business_id', 'stars', 'photo_id', 'photo_file', 'format', 'width', 'height', 'mode']]
-
-    total_rows = len(photo_set_df)
-
-    # drop rows with no photo id, no photo no prediction
-    photo_set_df = photo_set_df.dropna()
-
-    photo_set_df['width'] = photo_set_df['width'].astype('int32')
-    photo_set_df['height'] = photo_set_df['height'].astype('int32')
-
-    if total_rows - len(photo_set_df) > 0:
-        print(f"Dropped {total_rows - len(photo_set_df)} businesses with no photos")
 
     def wh_anal(column):
         lwr = column.lower()
@@ -717,6 +744,9 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     print(f"Mode: {len(unique_vals)} mode{'' if len(unique_vals) == 1 else 's'} - {unique_vals}")
     unique_vals = photo_set_df['stars'].unique()
     print(f"Stars: {len(unique_vals)} class{'' if len(unique_vals) == 1 else 'es'} - {unique_vals}")
+
+    if save_ids_path is not None:
+        save_list(save_ids_path, biz_photo_df['business_id'].unique().tolist())
 
     save_csv(photo_set_df, out_path, index=False)
 
@@ -859,6 +889,12 @@ if __name__ == "__main__":
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-li', '--limit_id', help="Limit number of business ids to read",
                         type=int, default=argparse.SUPPRESS)
+    parser.add_argument('-rs', '--random_select', help="Make random selection; 'value' < 1.0 = percent of total "
+                                                       "available, or 'value' > 1 = number to select",
+                        type=float, default=argparse.SUPPRESS)
+    parser.add_argument('-so', '--select_on', help="Column to make selection on or 'all' to select from total "
+                                                   "available; e.g. 'business_id'",
+                        type=str, default=argparse.SUPPRESS)
     parser.add_argument('-cs', '--csv_size',
                         help=f"max csv field size in kB; default {hex(csv.field_size_limit() // 0x1000)[2:]}kB",
                         type=int, default=argparse.SUPPRESS)
@@ -950,10 +986,16 @@ if __name__ == "__main__":
     if 'photo_folder_resize' in args or 'photo_size' in args:
         if ('photo_size' in args and len(args.photo_folder_resize) == 0) or \
            ('photo_size' not in args and len(args.photo_folder_resize)):
-            arg_error(parser, f"Options -pfr/--photo_folder_resize and -ps/--photo_size are required")
+            arg_error(parser, f"Options -pfr/--photo_folder_resize and -ps/--photo_size are both required")
         if 'photo_size' in args and len(args.photo_folder_resize):
             kwarg_dict['photo_folder_resize'] = paths['photo_folder_resize']
             kwarg_dict['photo_size'] = args.photo_size
+    if 'random_select' in args or 'select_on' in args:
+        if (('random_select' in args and 'select_on' not in args) or
+                ('random_select' not in args and 'select_on' in args)):
+            arg_error(parser, f"Options -rs/--random_select and -so/--select_on are both required")
+        kwarg_dict['random_select'] = args.random_select
+        kwarg_dict['select_on'] = args.select_on
 
     # load categories
     if len(args.cat_list) > 0:
@@ -1006,7 +1048,7 @@ if __name__ == "__main__":
     # photo dataset
     if paths['out_photo_set'] is not None:
         generate_photo_set(paths['biz_photo'], paths['pin'], biz_id_lst, paths['photo_folder'], paths['out_photo_set'],
-                           arg_dict=kwarg_dict)
+                           save_ids_path=paths['out_biz_id'], arg_dict=kwarg_dict)
 
     # resize photos
     if paths['photo_set_in'] is not None:

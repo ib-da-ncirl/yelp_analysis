@@ -10,6 +10,10 @@
     1. [Generate csv file of reviews for specified business ids](#generate-csv-file-of-reviews-for-specified-business-ids)
     1. [Generate csv file of tips for specified business ids](#generate-csv-file-of-tips-for-specified-business-ids)
     1. [Generate csv file of photos for specified business ids](#generate-csv-file-of-photos-for-specified-business-ids)
+        1. [Generate csv file of photos for specified business ids with a particular label](#generate-csv-file-of-photos-for-specified-business-ids-with-a-particular-label)
+    1. [Generate csv file for the photos image classification dataset](#generate-csv-file-for-the-photos-image-classification-dataset)
+        1. [Resize photos in image classification dataset](#resize-photos-in-image-classification-dataset)
+        1. [Generate randomly sampled image classification dataset](#generate-randomly-sampled-image-classification-dataset)
         1. [Generate resized photos images](#generate-resized-photos-images)
     1. [Generate csv file of checkins for specified business ids](#generate-csv-file-of-checkins-for-specified-business-ids)
     1. [Sample use case](#sample-use-case)
@@ -34,8 +38,8 @@ Install dependencies via
                   [-bp BIZ_PHOTO] [-oc OUT_CAT] [-obi OUT_BIZ_ID]
                   [-pf PHOTO_FOLDER] [-pfr PHOTO_FOLDER_RESIZE] [-dx DROP_REGEX]
                   [-mx MATCH_REGEX [MATCH_REGEX ...]] [-df {pandas,dask}]
-                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-cs CSV_SIZE]
-                  [-ps PHOTO_SIZE] [-v]
+                  [-pe {c,python}] [-nr NROWS] [-li LIMIT_ID] [-rs RANDOM_SELECT]
+                  [-so SELECT_ON] [-cs CSV_SIZE] [-ps PHOTO_SIZE] [-v]
     
     Perform ETL on the Yelp Dataset CSV data to extract the subset of
     businesses/reviews etc. based on a parent category
@@ -123,6 +127,12 @@ Install dependencies via
                             option)
       -li LIMIT_ID, --limit_id LIMIT_ID
                             Limit number of business ids to read
+      -rs RANDOM_SELECT, --random_select RANDOM_SELECT
+                            Make random selection; 'value' < 1.0 = percent of
+                            total available, or 'value' > 1 = number to select
+      -so SELECT_ON, --select_on SELECT_ON
+                            Column to make selection on or 'all' to select from
+                            total available; e.g. 'business_id'
       -cs CSV_SIZE, --csv_size CSV_SIZE
                             max csv field size in kB; default 20kB
       -ps PHOTO_SIZE, --photo_size PHOTO_SIZE
@@ -202,7 +212,9 @@ The list of business ids will be read from `business_ids.txt`, and the contents 
 
 The list of business ids will be read from `business_ids.txt`, and the contents of `photos.csv` are filtered to exclude photos for businesses not in the id list. The remaining photos will be saved to `/path/to/biz_photos.csv`.
 
-##### Generate csv file of photos for specified business ids with label 'food' 
+###### Generate csv file of photos for specified business ids with a particular label
+
+Using the example the label `food`  
 
     python3 etl.py -d /path/to -bi business_ids.txt -pi yelp_photos/photos.csv -op food_photos.csv -mx pin:label=food
 
@@ -228,12 +240,34 @@ Valid 'csv_id' are:
 The list of business ids will be read from `business_ids.txt`, and the contents of `yelp_academic_dataset_business.csv` are filtered to exclude photos for businesses not in the id list. 
 Similarly, the contents of `photos.csv` are filtered to exclude photos for businesses not in the id list, and of those photos only photos labeled `food` are allowed. The actual photos from the `/path/to/yelp_photos/photos` folder will be analysed, and the resultant dataset will be saved to `/path/to/photo_dataset.csv`.
 
-Additionally, it is possible to resize the photos using the combination of the `-ps/--photo_size` and `-pfr/--photo_folder_resize` options.
+###### Resize photos in image classification dataset 
+
+It is possible to resize the photos using the combination of the `-ps/--photo_size` and `-pfr/--photo_folder_resize` options.
 The addition of:
 
     -ps 299 -pfr yelp_photos/photos299
     
 to the previous command will save aspect ratio intact 299x299px copies of the photos to the `/path/to/yelp_photos/photos299` folder. 
+
+###### Generate randomly sampled image classification dataset 
+
+To generate a randomly sampled subset of photos, the addition of the combination of the `-rs/--random_select` and 
+`--so/--select_on` options will do a random sample based on a percentage or fixed number.
+The addition of:
+
+    -rs 0.2 -so all
+
+will take a 20% sample of all possible photos. E.g. 
+
+    python3 etl.py -d /path/to -bp yelp_dataset/yelp_academic_dataset_business.csv -pi yelp_photos/photos.csv -pf yelp_photos/photos -bi business_ids.txt -rs 0.2 -so business_id -obi business_ids_biz20.txt -ops photo_dataset_biz20.csv -mx pin:label=food    
+
+Whereas:
+
+    -rs 5000 -so business_id
+
+will take a sample of 5000 businesses and generate a dataset from the photos related to those businesses. E.g.
+
+    python3 etl.py -d /path/to -bp yelp_dataset/yelp_academic_dataset_business.csv -pi yelp_photos/photos.csv -pf yelp_photos/photos -bi business_ids.txt -rs 0.2 -so all -obi business_ids_biz20.txt -ops photo_dataset_biz20.csv -mx pin:label=food    
 
 ###### Generate resized photos images 
 
@@ -301,8 +335,8 @@ Any options set in the configuration file will be overwritten by their command l
 
 Specify the model to run using `run_model` in the configuration file, or in the command line using the `-r my_model` option.
 
-If the `show_val_loss`, `save_val_loss` or `save_summary` options are specified, the results of the classification will be saved in the folder specified in the `results_path_root` option in the configuration file.
-For example, with the settings:
+When the `show_val_loss`, `save_val_loss` or `save_summary` option(s) are specified, the results of the classification will be saved in the folder specified in the `results_path_root` option in the configuration file.
+For example, running a model called `my_model` with the settings:
 
     # results folder
     results_path_root: ./results
@@ -315,7 +349,7 @@ For example, with the settings:
     # save model summary when finished
     save_summary: true
 
-and running a model called `my_model` results in the files 
+results in the files 
 
 - `./results/my_model/200723_0909/my_model.png`
 
