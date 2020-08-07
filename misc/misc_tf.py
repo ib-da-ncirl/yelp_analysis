@@ -23,16 +23,23 @@
 """
 A collections of miscellaneous TensorFlow related functions
 """
-
+import os
 import re
 from collections import namedtuple
 import tensorflow as tf
+from numpy.core.multiarray import ndarray
 from tensorflow.keras.optimizers import Adadelta, Adagrad, Adam, Adamax, Ftrl, Nadam, RMSprop, SGD
 from tensorflow.python.client import device_lib
+from tensorflow.python.keras.models import Model
+
+from keras.preprocessing.image import load_img
+from keras.preprocessing.image import img_to_array
+from keras.applications.inception_v3 import preprocess_input as inception_v3_preprocess_input
+from keras.applications.resnet50 import preprocess_input as resnet50_preprocess_input
 
 DeviceDetail = namedtuple('DeviceDetail', ['name', 'type', 'num', 'mem'])
 
-TF_DEV_REGEX = re.compile(r"^/(device:|physical_device:){,1}(cpu|gpu):(\d+)")
+TF_DEV_REGEX = re.compile(r"^/(device:|physical_device:)?(cpu|gpu):(\d+)")
 
 
 def get_devices():
@@ -167,3 +174,59 @@ def get_optimiser(setting):
         raise ValueError(f"Unknown value for setting: {setting}")
 
     return optimiser
+
+
+def predict(photo_path: str, photo_file: str, target_size: tuple, model: Model, class_indices: dict, top=1):
+
+    photo_path = os.path.join(photo_path, photo_file)
+
+    # load image from file
+    image = load_img(photo_path, target_size=target_size)
+    # convert the image pixels to a numpy array
+    image = img_to_array(image)
+    # reshape data for the model
+    image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
+    # prepare the image for the model
+    if model.name.startswith('inception_v3'):
+        image = inception_v3_preprocess_input(image)
+    elif model.name.startswith('resnet50'):
+        image = resnet50_preprocess_input(image)
+    else:
+        raise NotImplementedError(f"Preprocessing not implemented for {model.name}")
+
+    # predict the probability across all output classes
+    preds = model.predict(image)
+    # convert the probabilities to class labels
+    results = []
+    for pred in preds:
+        top_indices = pred.argsort()[-top:]
+        result = [(class_indices[i], pred[i]) for i in top_indices]
+        results.append(result)
+
+    return results
+
+
+def predict_img(image: ndarray, model: Model, class_indices: dict, top=1):
+
+    # convert the image pixels to a numpy array
+    image = img_to_array(image)
+    # reshape data for the model
+    image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
+    # prepare the image for the model
+    if model.name.startswith('inception_v3'):
+        image = inception_v3_preprocess_input(image)
+    elif model.name.startswith('resnet50'):
+        image = resnet50_preprocess_input(image)
+    else:
+        raise NotImplementedError(f"Preprocessing not implemented for {model.name}")
+
+    # predict the probability across all output classes
+    preds = model.predict(image)
+    # convert the probabilities to class labels
+    results = []
+    for pred in preds:
+        top_indices = pred.argsort()[-top:]
+        result = [(class_indices[i], pred[i]) for i in top_indices]
+        results.append(result)
+
+    return results

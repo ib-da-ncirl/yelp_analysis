@@ -21,6 +21,8 @@
 #
 from typing import Union
 
+from tensorflow.python.keras.models import Model
+
 from photo_models.model_args import ModelArgs, SplitTotalBatch
 import tensorflow as tf
 from keras_preprocessing.image import DataFrameIterator
@@ -53,7 +55,7 @@ def calc_step_size(data: Union[DataFrameIterator, tf.data.Dataset], info: SplitT
     return step_size
 
 
-def model_fit(model, model_args: ModelArgs, verbose: bool = False):
+def model_fit(model: Model, model_args: ModelArgs, verbose: bool = False):
 
     if verbose:
         model.summary()

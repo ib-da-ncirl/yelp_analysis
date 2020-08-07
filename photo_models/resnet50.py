@@ -35,7 +35,7 @@ def resnet50_eg(model_args: ModelArgs, verbose=False):
     predictions = Dense(model_args.class_count, activation=model_args.misc_args['log_activation'])(x)
 
     # this is the model we will train
-    model = Model(inputs=base_model.input, outputs=predictions)
+    model = Model(inputs=base_model.input, outputs=predictions, name=f"{base_model.name}_tl")
 
     # first: train only the top layers (which were randomly initialized)
     for layer in base_model.layers:

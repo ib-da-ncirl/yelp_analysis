@@ -14,6 +14,14 @@ run_model: my_child_model
 #  - my_model
 #  - my_child_model
 
+# specify the path to a saved model
+model_path: ./results/inception_v3_eg_hflip_v2/200807_0901/inception_v3_tl
+
+# perform model training
+do_training: false
+# perform model prediction
+do_prediction: true
+
 defaults:
   # default settings, all may be over written for a particular model by specifying the value in the model config
   # path to the photo dataset csv file
@@ -39,14 +47,35 @@ defaults:
   batch_size: 32
   # random seed for shuffling and transformations
   seed: 42
-  # Fraction of images reserved for validation (strictly between 0 and 1).
-  validation_split: 0.25
+  # Fraction of images reserved for validation (sum of training, validation & verification strictly between 0 and 1).
+  validation_split: 0.2
+  # Fraction of images reserved for verification
+  verification_split: 0.05
   # default template for results folder for each model; 'results_path_root/model_name/YYMMDD_HHMM'
   results_path: <results_path_root>/<model_name>/{%y%m%d_%H%M}
 
   # rescaling factor. Defaults to None. If None or 0, no rescaling is applied, otherwise we multiply the data by the value provided (after applying all other transformations).
   # Note: eval() is used to evaluate if a string expression is supplied; e.g. '1./255.' = 0.00392156862745098
   rescale: 1./255.
+
+  # display val & loss graph when finished
+  show_val_loss: false
+  # save val & loss graph when finished
+  save_val_loss: true
+  # save model summary when finished
+  save_summary: true
+  # save model when finished
+  save_model: true
+
+# activation functions, see https://keras.io/api/layers/activations/ and
+#                           https://www.tensorflow.org/api_docs/python/tf/keras/activations
+# -----------------------------------------------------------------------------------------
+# one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+#
+# current activation settings are
+# - gsap_activation
+# - logistic layer
+
 
 models:
   - name: my_parent_model

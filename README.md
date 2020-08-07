@@ -323,13 +323,16 @@ Install dependencies via
     Usage: photo_stars.py
      -h        |--help                     : Display usage
      -c <value>|--config <value>           : Specify path to configuration script
-     -d <value>|--dataset_path <value>     : Specify path to the photo dataset csv file
-     -p <value>|--photo_path <value>       : Specify path to the photos folder
      -m <value>|--modelling_device <value> : TensorFlow preferred modelling device; e.g. /cpu:0
      -r <value>|--run_model <value>        : Model to run
+     -x <value>|--execute_model <value>    : Model to load and execute
+     -t        |--do_training              : Do model training
+     -p        |--do_prediction            : Do prediction
      -s <value>|--source <value>           : Model source; 'img' = ImageDataGenerator or 'ds' = Dataset
+     -b <value>|--random_batch <value>     : If < 1, percent of available photo to randomly sample, else number to randomly sample
      -l <value>|--photo_limit <value>      : Max number of photos to use; 'none' to use all available, or a number
      -v        |--verbose                  : Verbose mode
+
  
 Any options set in the configuration file will be overwritten by their command line equivalents. 
 
@@ -348,6 +351,8 @@ For example, running a model called `my_model` with the settings:
     save_val_loss: true
     # save model summary when finished
     save_summary: true
+    # save model when finished
+    save_model: true
 
 results in the files 
 
@@ -367,7 +372,12 @@ results in the files
 
     Model results summary. Updated with final result and details for each model run. 
 
+- `./results/my_model/200723_0909/<my_modelname>
+
+    Saved model data
+
 where `200723_0909` is the date and time when of the model run.
+
 
 ### Development
 #### Adding a new model 

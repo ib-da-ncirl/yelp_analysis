@@ -29,7 +29,7 @@ from typing import Union
 import pkg_resources
 import yaml
 
-ConfigOpt = namedtuple('ConfigOpt', ['short', 'long', 'desc', 'has_value', 'req', 'dfl_value', 'type'])
+ConfigOpt = namedtuple('ConfigOpt', ['short', 'long', 'desc', 'has_value', 'req', 'dfl_value', 'typ'])
 
 
 class ArgCtrl:
@@ -43,7 +43,7 @@ class ArgCtrl:
         self._name = name
 
     def add_option(self, short_name: str, long_name: str, description: str, has_value: bool = False,
-                   required: bool = False, dfl_value=None, type='str'):
+                   required: bool = False, dfl_value=None, typ='str'):
         """
         Add an option
         :param short_name: Short name
@@ -52,7 +52,7 @@ class ArgCtrl:
         :param has_value: Has value flag
         :param required: Is required flag
         :param dfl_value: Default value, if not present
-        :param type: type to convert command line value to
+        :param typ: type to convert command line value to
         :return:
         """
         if short_name in self._opts.keys():
@@ -61,7 +61,7 @@ class ArgCtrl:
 
         self._opts[short_name] = ConfigOpt(short_name if not has_value else f"{short_name}:",
                                            long_name if not has_value else f"{long_name}=",
-                                           description, has_value, required, dfl_value, type)
+                                           description, has_value, required, dfl_value, typ)
 
     @property
     def options(self):
@@ -166,11 +166,12 @@ class ArgCtrl:
 
         cmd_line_args = {}
         # set default arguments
-        if set_defaults:
-            for o_key, opt_info in {x: self._opts[x] for x in self._opts if x not in ['h', 'c']}.items():
-                if opt_info.has_value:
-                    cmd_line_args[opt_info.long[:-1]] = opt_info.dfl_value
-        # read command line
+        for o_key, opt_info in {x: self._opts[x] for x in self._opts if x not in ['h', 'c']}.items():
+            if set_defaults and opt_info.has_value:
+                cmd_line_args[opt_info.long[:-1]] = opt_info.dfl_value
+            elif opt_info.typ == 'flag':
+                cmd_line_args[opt_info.long] = False
+    # read command line
         exclude_opts = ['h', 'c']
         for opt, arg in opts:
             if opt == self.get_short_opt('h') or opt == self.get_long_opt('h'):
@@ -186,15 +187,22 @@ class ArgCtrl:
                         exclude_opts.append(o_key)
                         raw_arg_key = opt_info.long[:-1] if opt_info.has_value else opt_info.long
                         if arg is not None:
-                            if opt_info.type == int:
+                            if opt_info.typ == int:
                                 arg = int(arg)
-                            elif opt_info.type == float:
+                            elif opt_info.typ == float:
                                 arg = float(arg)
-                            elif isinstance(opt_info.type, str) and opt_info.type.startswith('date='):
-                                splits = opt_info.type.split('=')
-                                if len(splits) == 2:
-                                    arg = datetime.datetime.strptime(arg, splits[1])
+                            elif isinstance(opt_info.typ, str):
+                                if opt_info.typ.startswith('date='):
+                                    splits = opt_info.typ.split('=')
+                                    if len(splits) == 2:
+                                        arg = datetime.datetime.strptime(arg, splits[1])
+                                elif opt_info.typ == 'flag':
+                                    arg = True
+                                else:
+                                    raise ValueError(f"Unknown typ {opt_info.typ}")
                             cmd_line_args[raw_arg_key] = arg
+                        elif opt_info.typ == 'flag':
+                            cmd_line_args[raw_arg_key] = True
                         break
 
         # load app config
