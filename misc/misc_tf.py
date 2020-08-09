@@ -26,10 +26,15 @@ A collections of miscellaneous TensorFlow related functions
 import os
 import re
 from collections import namedtuple
+from typing import Union
+
 import tensorflow as tf
 from numpy.core.multiarray import ndarray
 from tensorflow.keras.optimizers import Adadelta, Adagrad, Adam, Adamax, Ftrl, Nadam, RMSprop, SGD
 from tensorflow.python.client import device_lib
+from tensorflow.python.keras.callbacks import ProgbarLogger
+from tensorflow.python.keras.losses import BinaryCrossentropy, CategoricalCrossentropy, SparseCategoricalCrossentropy, \
+    MeanSquaredError
 from tensorflow.python.keras.models import Model
 
 from keras.preprocessing.image import load_img
@@ -44,7 +49,7 @@ TF_DEV_REGEX = re.compile(r"^/(device:|physical_device:)?(cpu|gpu):(\d+)")
 
 def get_devices():
     """
-    Get TensotFlow devices
+    Get TensorFlow devices
     :return:
     """
     devices = {'gpu': [], 'cpu': []}
@@ -142,7 +147,7 @@ def set_memory_growth(enable):
             print(e)
 
 
-def get_optimiser(setting):
+def get_optimiser(setting: Union[str, dict]):
 
     # 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
     # or a dict with 'name' and other args
@@ -176,6 +181,35 @@ def get_optimiser(setting):
     return optimiser
 
 
+def get_loss(setting: Union[str, dict]):
+
+    # 'binary_crossentropy', 'categorical_crossentropy', 'sparse_categorical_crossentropy' or 'mean_squared_error'
+    # or a dict with 'name' and other args
+    if isinstance(setting, str):
+        loss = setting     # just return the name and let keras handle the rest
+    elif isinstance(setting, dict):
+        # need to instantiate
+        name = setting['name'].lower()
+        args = {key: val for key, val in setting.items() if key != 'name'}
+        if name == 'binary_crossentropy':
+            # only two label classes (assumed to be 0 and 1)
+            loss = BinaryCrossentropy(**args)
+        elif name == 'categorical_crossentropy':
+            # labels to be provided in a one_hot representation
+            loss = CategoricalCrossentropy(**args)
+        elif name == 'sparse_categorical_crossentropy':
+            # labels to be provided as integers
+            loss = SparseCategoricalCrossentropy(**args)
+        elif name == 'mean_squared_error':
+            loss = MeanSquaredError(**args)
+        else:
+            raise ValueError(f"Unknown loss function: {setting['name']}")
+    else:
+        raise ValueError(f"Unknown value for setting: {setting}")
+
+    return loss
+
+
 def predict(photo_path: str, photo_file: str, target_size: tuple, model: Model, class_indices: dict, top=1):
 
     photo_path = os.path.join(photo_path, photo_file)
@@ -206,7 +240,7 @@ def predict(photo_path: str, photo_file: str, target_size: tuple, model: Model, 
     return results
 
 
-def predict_img(image: ndarray, model: Model, class_indices: dict, top=1):
+def preprocess_predict_img(image: ndarray, model: Model):
 
     # convert the image pixels to a numpy array
     image = img_to_array(image)
@@ -220,13 +254,33 @@ def predict_img(image: ndarray, model: Model, class_indices: dict, top=1):
     else:
         raise NotImplementedError(f"Preprocessing not implemented for {model.name}")
 
+    return image
+
+
+def predict_img(image: ndarray, model: Model, classes: Union[dict, list] = None, top=1):
+
+    image = preprocess_predict_img(image, model)
+
     # predict the probability across all output classes
-    preds = model.predict(image)
+    preds = model.predict(image, verbose=1, callbacks=[
+        ProgbarLogger()
+    ])
     # convert the probabilities to class labels
     results = []
     for pred in preds:
         top_indices = pred.argsort()[-top:]
-        result = [(class_indices[i], pred[i]) for i in top_indices]
+        if classes is not None:
+            result = [(classes[i], pred[i]) for i in top_indices]
+        else:
+            result = pred
         results.append(result)
 
     return results
+
+
+def check_model_misc_args(misc_args: dict) -> dict:
+    for arg in ['gsap_activation', 'gsap_dropout', 'log_activation', 'run1_optimizer', 'run1_loss', 'run2_optimizer',
+                'run2_loss']:
+        if arg not in misc_args:
+            raise ValueError(f"Missing {arg} argument")
+    return misc_args

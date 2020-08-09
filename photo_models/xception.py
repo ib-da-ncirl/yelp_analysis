@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.keras.applications.xception import Xception
 from tensorflow.python.keras import Input
 
-from misc import get_optimiser
+from misc import get_optimiser, get_loss, check_model_misc_args
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
@@ -16,6 +16,8 @@ from photo_models.model_misc import model_fit
 def xception_eg(model_args: ModelArgs, verbose: bool = False):
 
     raise NotImplementedError("Xception implementation is untested, memory requirements exceed availability")
+
+    check_model_misc_args(model_args.misc_args)
 
     # create the base pre-trained model
     # https://keras.io/api/applications/xception/
@@ -42,7 +44,7 @@ def xception_eg(model_args: ModelArgs, verbose: bool = False):
         # training run 1
         # compile the model (should be done *after* setting layers to non-trainable)
         model.compile(optimizer=get_optimiser(model_args.misc_args['run1_optimizer']),
-                      loss='categorical_crossentropy',
+                      loss=get_loss(model_args.misc_args['run1_loss']),
                       metrics=['accuracy'])
 
         # train the model on the new data for a few epochs
@@ -54,7 +56,7 @@ def xception_eg(model_args: ModelArgs, verbose: bool = False):
         # training run 2
         # we need to recompile the model for these modifications to take effect
         model.compile(optimizer=get_optimiser(model_args.misc_args['run2_optimizer']),
-                      loss='categorical_crossentropy',
+                      loss=get_loss(model_args.misc_args['run2_loss']),
                       metrics=['accuracy'])
 
         # we train our model again (this time fine-tuning the top inception blocks

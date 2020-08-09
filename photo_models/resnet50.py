@@ -8,7 +8,7 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 import tensorflow as tf
 from tensorflow.python.keras.layers import BatchNormalization
 
-from misc import get_optimiser
+from misc import get_optimiser, get_loss, check_model_misc_args
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
@@ -16,6 +16,8 @@ from photo_models.model_misc import model_fit
 def resnet50_eg(model_args: ModelArgs, verbose=False):
 
     raise NotImplementedError("ResNet50 implementation is untested, allocation exceeds 10% of free system memory")
+
+    check_model_misc_args(model_args.misc_args)
 
     # create the base pre-trained model
     # https://keras.io/api/applications/resnet/
@@ -46,7 +48,7 @@ def resnet50_eg(model_args: ModelArgs, verbose=False):
         # training run 1
         # compile the model (should be done *after* setting layers to non-trainable)
         model.compile(optimizer=get_optimiser(model_args.misc_args['run1_optimizer']),
-                      loss='categorical_crossentropy',
+                      loss=get_loss(model_args.misc_args['run1_loss']),
                       metrics=['accuracy'])
 
         # train the model on the new data for a few epochs
@@ -65,7 +67,7 @@ def resnet50_eg(model_args: ModelArgs, verbose=False):
 
         # we need to recompile the model for these modifications to take effect
         model.compile(optimizer=get_optimiser(model_args.misc_args['run2_optimizer']),
-                      loss='categorical_crossentropy',
+                      loss=get_loss(model_args.misc_args['run2_loss']),
                       metrics=['accuracy'])
 
         # we train our model again

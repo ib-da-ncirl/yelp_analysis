@@ -31,6 +31,8 @@ import os
 import sys
 import csv
 import re
+from math import ceil
+
 import pandas as pd
 import dask.dataframe as dd
 import argparse
@@ -657,7 +659,21 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     biz_df, _ = get_business(biz_path, id_list=id_lst, arg_dict=arg_dict, csv_id='biz_photo')
     photo_df, _, _ = get_photos(photo_csv_path, id_lst, None, arg_dict=arg_dict)
 
-    biz_df['stars'] = biz_df['stars'].apply(lambda x: str(x).replace(".", "_"))
+    # categorical representation; e.g. '1_0' represents 1.0 stars
+    biz_df['stars_cat'] = biz_df['stars'].apply(lambda x: str(x).replace(".", "_"))
+    # ordinal representation;
+    # e.g. [0,0,0,0,0,0,0,0,0] represents 1.0 star, [1,0,0,0,0,0,0,0,0] represents 1.5 stars etc.
+    star_min = biz_df['stars'].min()
+
+    max_len = ceil(((biz_df['stars'].max() - star_min) * 2)) + 1    # stars range * num of 0.5 + 1
+
+    def fill_array(x):
+        one_cnt = ceil((x - star_min) * 2)
+        return ([1] * one_cnt) + ([0] * (max_len - one_cnt))
+    biz_df['stars_ord'] = biz_df['stars'].apply(fill_array)
+
+    # numerical representation; e.g. 0.5 = 1, 1.0 = 2 etc.
+    biz_df['stars_num'] = biz_df['stars'].apply(lambda x: ceil(x * 2))
 
     # many-to-one join, i.e many photos to one business id
     biz_photo_df = pd.merge(photo_df, biz_df, on='business_id', how='outer')
@@ -729,7 +745,8 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     progress("Photo", len(biz_photo_df), len(biz_photo_df))
 
     # just keep required columns
-    photo_set_df = biz_photo_df[['business_id', 'stars', 'photo_id', 'photo_file', 'format', 'width', 'height', 'mode']]
+    photo_set_df = biz_photo_df[['business_id', 'stars', 'stars_cat', 'stars_ord', 'stars_num', 'photo_id',
+                                 'photo_file', 'format', 'width', 'height', 'mode']]
 
     def wh_anal(column):
         lwr = column.lower()
@@ -743,7 +760,12 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     unique_vals = photo_set_df['mode'].unique()
     print(f"Mode: {len(unique_vals)} mode{'' if len(unique_vals) == 1 else 's'} - {unique_vals}")
     unique_vals = photo_set_df['stars'].unique()
-    print(f"Stars: {len(unique_vals)} class{'' if len(unique_vals) == 1 else 'es'} - {unique_vals}")
+    unique_cat_vals = photo_set_df['stars_cat'].unique()
+    unique_num_vals = photo_set_df['stars_num'].unique()
+    unique_ord_vals = set()
+    photo_set_df['stars_ord'].apply(lambda x: unique_ord_vals.add(tuple(x)))
+    print(f"Stars: {len(unique_vals)} class{'' if len(unique_vals) == 1 else 'es'} - {unique_vals}\n"
+          f"\t{unique_cat_vals}\n\t{unique_num_vals}\n\t{unique_ord_vals}")
 
     if save_ids_path is not None:
         save_list(save_ids_path, biz_photo_df['business_id'].unique().tolist())

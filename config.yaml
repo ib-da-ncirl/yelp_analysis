@@ -18,7 +18,8 @@ results_path_root: ./results
 #run_model: tf_image_eg_hflip
 #run_model: inception_v3_eg
 #run_model: inception_v3_eg_hflip
-run_model: inception_v3_eg_hflip_v2
+#run_model: inception_v3_eg_hflip_cat_v2
+run_model: inception_v3_eg_hflip_ord_v2
 #run_model: alexnet
 #run_model: xception_eg
 # or list of models to run
@@ -54,9 +55,9 @@ run_model: inception_v3_eg_hflip_v2
 #  - inception_v3_eg_hflip_v2_25  # can only run on its own not enough memory during training run 2
                                   # GeForce GTX 1050 2GB
 
-model_path: ./results/inception_v3_eg_hflip_v2/200807_0901/inception_v3_tl
+model_path: ./results/inception_v3_eg_hflip_ord_v2/200809_1622/inception_v3_tl
 
-do_training: false
+do_training: true
 do_prediction: true
 
 
@@ -84,8 +85,22 @@ defaults:
 
   # column in photo dataset csv file that contains the filenames
   x_col: photo_file
+
   # column in photo dataset csv file that contains the target data
-  y_col: stars
+  y_col: stars_cat  # categorical representation; e.g. '1_0' represents 1.0 stars
+#  y_col: stars_ord  # ordinal representation; e.g. [1,1,0,0,0,0,0,0,0,0,0] represents 1.0 stars
+
+  # one of "binary", "categorical", "input", "multi_output", "raw", "sparse" or None. Default: "categorical"
+  # Mode for yielding the targets:
+  # - "binary": 1D numpy array of binary labels
+  # - "categorical": 2D numpy array of one-hot encoded labels. Supports multi-label output.
+  # - "input": images identical to input images (mainly used to work with autoencoders)
+  # - "multi_output": list with the values of the different columns,
+  # - "raw": numpy array of values in y_col column(s),
+  # - "sparse": 1D numpy array of integer labels
+  # - None, no targets are returned
+  class_mode: categorical
+
   # one of "grayscale", "rgb", "rgba". Whether the images will be converted to have 1 or 3 color channels
   color_mode: rgb
   # Size of the batches of data
@@ -108,14 +123,38 @@ defaults:
   save_summary: true
   save_model: true
 
-# activation functions, see https://keras.io/api/layers/activations/ and
-#                           https://www.tensorflow.org/api_docs/python/tf/keras/activations
-# -----------------------------------------------------------------------------------------
+# Activation functions
+# see https://keras.io/api/layers/activations/ and https://www.tensorflow.org/api_docs/python/tf/keras/activations
+# ----------------------------------------------------------------------------------------------------------------
 # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
 #
 # current activation settings are
 # - gsap_activation
 # - logistic layer
+#
+# Problem type    Output                             Activation function             Loss function
+# Regression      Numerical                          Linear (-infinity to infinity)  Mean square error (MSE)
+#                 Numerical > 0                      ReLU (0 to infinity)            Mean square error (MSE)
+# Classification  Binary                             Sigmoid (0 to 1)                Binary cross entropy (difference between two probability distribution)
+#                                                    Tanh (-1 to 1)                  Binary cross entropy (difference between two probability distribution)
+# Classification  Single label, multiple classes     Softmax (0 to 1, all sum to 1)  Cross entropy (difference between two probability distribution)
+# Classification  Multiple labels, multiple classes  Sigmoid (0 to 1)                Binary cross entropy (difference between two probability distribution)
+#
+#
+
+# Loss functions
+# --------------
+# see https://keras.io/api/losses/ and https://www.tensorflow.org/api_docs/python/tf/keras/losses
+# some possible values:
+# 'binary_crossentropy'             - only two label classes (assumed to be 0 and 1)
+# 'categorical_crossentropy'        - labels to be provided in a one_hot representation
+# 'sparse_categorical_crossentropy' - labels to be provided as integers
+# 'mean_squared_error'
+
+# Optimiser functions
+# -------------------
+# see https://keras.io/api/optimizers/ and https://www.tensorflow.org/api_docs/python/tf/keras/optimizers
+# one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
 
 
 models:
@@ -202,33 +241,75 @@ models:
     # - With height_shift_range=2 possible values are integers [-1, 0, +1], same as with height_shift_range=[-1, 0, +1], while with height_shift_range=1.0 possible values are floats in the interval [-1.0, +1.0).
     height_shift_range: 0.15
 
-  - name: inception_v3_eg_hflip_v2
-    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2
+  - name: inception_v3_eg_hflip_cat_v2
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2 [categorical]
     parent: inception_v3_eg_hflip
     # function from models package to call
     function: inception_v3_eg_v2
 
-    epochs: 1
+    epochs: 15
+
+    # column in photo dataset csv file that contains the target data
+    y_col: stars_cat  # categorical representation; e.g. '1_0' represents 1.0 stars
+    # one of "binary", "categorical", "input", "multi_output", "raw", "sparse" or None
+    class_mode: categorical
 
     # global spatial average pooling layer
     gsap_units: 1024
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: relu
+    # Float between 0 and 1. Fraction of the input units to drop.
+    gsap_dropout: 0.5
 
-    # logistic layer
-    log_activation: softmax   # result could be interpreted as a probability distribution
+    # global spatial average pooling layer
+    gsap2_units: 512
+    # activation function, see 'Activation functions' above
+    gsap2_activation: relu
+    # Float between 0 and 1. Fraction of the input units to drop.
+    gsap2_dropout: 0.5
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # logistic layer activation function, see 'Activation functions' above
+    log_activation: softmax
+
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: rmsprop
 
-    # training run 2 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 loss; see 'Loss functions' above
+    run1_loss: categorical_crossentropy
+
+    # training run 2 optimizer, see 'Optimiser functions' above
     run2_optimizer:
       name: sgd
       lr: 0.0001
       momentum: 0.9
 
+    # training run 2 loss; see 'Loss functions' above
+    run2_loss: categorical_crossentropy
+
     # training run 2 number of inception from top to train, e.g. 2 is top 2
     run2_inceptions_to_train: 2
+
+  - name: inception_v3_eg_hflip_ord_v2
+    desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2 [ordinal]
+    parent: inception_v3_eg_hflip_cat_v2
+
+    # column in photo dataset csv file that contains the target data
+    y_col: stars_ord  # ordinal representation; e.g. [1,1,0...] represents 1.0 stars
+    # one of "binary", "categorical", "input", "multi_output", "raw", "sparse" or None
+    class_mode: raw
+
+    # logistic layer activation function, see 'Activation functions' above
+    log_activation: sigmoid
+
+    # training run 1 loss; see 'Loss functions' above
+    run1_loss: categorical_crossentropy
+
+    # training run 2 loss; see 'Loss functions' above
+    run2_loss: categorical_crossentropy
+
+
+
+
 
   - name: inception_v3_eg_hflip_v2_1
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.1
@@ -279,127 +360,126 @@ models:
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.5
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
-    # see https://www.tensorflow.org/api_docs/python/tf/keras/activations
+    # activation function, see 'Activation functions' above
     gsap_activation: elu
 
   - name: inception_v3_eg_hflip_v2_6
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.6
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: exponential
 
   - name: inception_v3_eg_hflip_v2_7
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.7
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: hard_sigmoid
 
   - name: inception_v3_eg_hflip_v2_8
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.8
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: linear
 
   - name: inception_v3_eg_hflip_v2_9
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.9
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: selu
 
   - name: inception_v3_eg_hflip_v2_10
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.10
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: sigmoid
 
   - name: inception_v3_eg_hflip_v2_11
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.11
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: softmax
 
   - name: inception_v3_eg_hflip_v2_12
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.12
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: softplus
 
   - name: inception_v3_eg_hflip_v2_13
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.13
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: softsign
 
   - name: inception_v3_eg_hflip_v2_14
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.14
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: swish
 
   - name: inception_v3_eg_hflip_v2_15
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.15
     parent: inception_v3_eg_hflip_v2
 
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: tanh
 
   - name: inception_v3_eg_hflip_v2_16
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.16
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: adadelta
 
   - name: inception_v3_eg_hflip_v2_17
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.17
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: adagrad
 
   - name: inception_v3_eg_hflip_v2_18
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.18
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: adam
 
   - name: inception_v3_eg_hflip_v2_19
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.19
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: adamax
 
   - name: inception_v3_eg_hflip_v2_20
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.20
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: ftrl
 
   - name: inception_v3_eg_hflip_v2_21
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.21
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: nadam
 
   - name: inception_v3_eg_hflip_v2_22
     desc: Fine-tune InceptionV3 on a new set of classes (Augmentation) Ver. 2.22
     parent: inception_v3_eg_hflip_v2
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: sgd
 
   - name: inception_v3_eg_hflip_v2_23
@@ -439,16 +519,16 @@ models:
 
     # global spatial average pooling layer
     gsap_units: 1024
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: relu
 
-    # logistic layer
+    # logistic layer activation function, see 'Activation functions' above
     log_activation: softmax
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: rmsprop
 
-    # training run 2 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 2 optimizer, see 'Optimiser functions' above
     run2_optimizer:
       name: sgd
       lr: 0.0001
@@ -472,13 +552,13 @@ models:
 
     # global spatial average pooling layer
     gsap_units: 1024
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: relu
 
-    # logistic layer
+    # logistic layer activation function, see 'Activation functions' above
     log_activation: softmax
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: rmsprop
 
 
@@ -497,16 +577,16 @@ models:
 
     # global spatial average pooling layer
     gsap_units: 512
-    # one of 'elu','exponential','hard_sigmoid','linear','relu','selu','sigmoid','softmax','softplus','softsign','swish' or 'tanh'
+    # activation function, see 'Activation functions' above
     gsap_activation: relu
 
-    # logistic layer
+    # logistic layer activation function, see 'Activation functions' above
     log_activation: softmax
 
-    # training run 1 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: rmsprop
 
-    # training run 2 optimizer; one of 'adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam' , 'rmsprop' or 'sgd'
+    # training run 2 optimizer, see 'Optimiser functions' above
     run2_optimizer:
       name: sgd
       lr: 0.0001

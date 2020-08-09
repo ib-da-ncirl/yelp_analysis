@@ -1,4 +1,4 @@
-# This model is taken from the Tensor Image classification tutorial
+# This basis of this model is taken from the Tensor Image classification tutorial
 # https://keras.io/api/applications/  "Fine-tune InceptionV3 on a new set of classes"
 # and adapted for use here.
 #
@@ -6,15 +6,17 @@ import re
 
 from tensorflow.keras.applications.inception_v3 import InceptionV3
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 import tensorflow as tf
 
-from misc import get_optimiser
+from misc import get_optimiser, get_loss, check_model_misc_args
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
 
 def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
+
+    misc_args = check_model_misc_args(model_args.misc_args)
 
     # create the base pre-trained model
     # https://keras.io/api/applications/inceptionv3/
@@ -28,10 +30,15 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
     # add a global spatial average pooling layer
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
-    # let's add a fully-connected layer
-    x = Dense(model_args.misc_args['gsap_units'], activation=model_args.misc_args['gsap_activation'])(x)
+    # add dropout to reduce overfitting
+    x = Dropout(misc_args['gsap_dropout'])(x)
+    # add a fully-connected layer
+    x = Dense(misc_args['gsap_units'], activation=misc_args['gsap_activation'])(x)
+    x = Dropout(misc_args['gsap2_dropout'])(x)
+    # add a fully-connected layer
+    x = Dense(misc_args['gsap2_units'], activation=misc_args['gsap_activation'])(x)
     # and a logistic layer
-    predictions = Dense(model_args.class_count, activation=model_args.misc_args['log_activation'])(x)
+    predictions = Dense(model_args.class_count, activation=misc_args['log_activation'])(x)
 
     # this is the model we will train
     model = Model(inputs=base_model.input, outputs=predictions, name=f"{base_model.name}_tl")
@@ -45,8 +52,8 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
 
         # training run 1
         # compile the model (should be done *after* setting layers to non-trainable)
-        model.compile(optimizer=get_optimiser(model_args.misc_args['run1_optimizer']),
-                      loss='categorical_crossentropy',
+        model.compile(optimizer=get_optimiser(misc_args['run1_optimizer']),
+                      loss=get_loss(misc_args['run1_loss']),
                       metrics=['accuracy'])
 
         # train the model on the new data for a few epochs
@@ -64,7 +71,7 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
                 blocks.append((i, int(match.group(1))))
         # we chose to train the top inception blocks, i.e. we will freeze
         # the layers associated with the first blocks and unfreeze the rest:
-        num_to_train = model_args.misc_args['run2_inceptions_to_train']
+        num_to_train = misc_args['run2_inceptions_to_train']
         if num_to_train + 1 > len(blocks):
             raise ValueError(f"Inception blocks to train ({num_to_train}) exceeds number of blocks ({len(blocks)})")
         freeze_below = blocks[-num_to_train - 1][0] + 1
@@ -78,14 +85,14 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
 
         # training run 2
         # we need to recompile the model for these modifications to take effect
-        model.compile(optimizer=get_optimiser(model_args.misc_args['run2_optimizer']),
-                      loss='categorical_crossentropy',
+        model.compile(optimizer=get_optimiser(misc_args['run2_optimizer']),
+                      loss=get_loss(misc_args['run2_loss']),
                       metrics=['accuracy'])
 
         # we train our model again (this time fine-tuning the top inception blocks
         # alongside the top Dense layers
 
-    return model_fit(model, model_args, verbose=verbose)
+    return model_fit(model, model_args, verbose=verbose, callbacks=model_args.callbacks)
 
 
 def inception_v3_eg(model_args: ModelArgs, verbose: bool = False):

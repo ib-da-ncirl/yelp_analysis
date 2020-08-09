@@ -25,6 +25,7 @@ from collections import namedtuple
 from keras_preprocessing.image import DataFrameIterator
 import tensorflow as tf
 from tensorflow.keras import Input
+from tensorflow.keras.callbacks import Callback
 
 SplitTotalBatch = namedtuple('SplitTotalBatch', ['val_split', 'total', 'batch'])
 
@@ -58,6 +59,7 @@ class ModelArgs:
         self._validation_split = 0.0
         self._total = 0
         self._batch_size = 0
+        self._callbacks = None
 
     @property
     def device_name(self) -> str:
@@ -146,6 +148,17 @@ class ModelArgs:
     @batch_size.setter
     def batch_size(self, batch_size: int):
         self._batch_size = batch_size
+
+    @property
+    def callbacks(self) -> list:
+        return self._callbacks
+
+    @callbacks.setter
+    def callbacks(self, callbacks: Union[Callback, list]):
+        if isinstance(callbacks, Callback):
+            self._callbacks = [callbacks]
+        else:
+            self._callbacks = callbacks
 
     def set_split_total_batch(self, validation_split: float, total: int, batch_size: int):
         self._validation_split = validation_split
