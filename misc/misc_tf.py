@@ -33,6 +33,7 @@ from numpy.core.multiarray import ndarray
 from tensorflow.keras.optimizers import Adadelta, Adagrad, Adam, Adamax, Ftrl, Nadam, RMSprop, SGD
 from tensorflow.python.client import device_lib
 from tensorflow.python.keras.callbacks import ProgbarLogger
+from tensorflow.python.keras.layers import Conv2D, Dense
 from tensorflow.python.keras.losses import BinaryCrossentropy, CategoricalCrossentropy, SparseCategoricalCrossentropy, \
     MeanSquaredError
 from tensorflow.python.keras.models import Model
@@ -210,6 +211,18 @@ def get_loss(setting: Union[str, dict]):
     return loss
 
 
+def get_conv2d(args, input_shape):
+    # filters and kernel are positional args
+    kwargs = {key: val for key, val in args.items() if key not in ['filters', 'kernel']}
+    return Conv2D(args['filters'], args['kernel'], input_shape=input_shape, **kwargs)
+
+
+def get_dense(args):
+    # units is positional args
+    kwargs = {key: val for key, val in args.items() if key not in ['units']}
+    return Dense(args['units'], **kwargs)
+
+
 def predict(photo_path: str, photo_file: str, target_size: tuple, model: Model, class_indices: dict, top=1):
 
     photo_path = os.path.join(photo_path, photo_file)
@@ -251,6 +264,8 @@ def preprocess_predict_img(image: ndarray, model: Model):
         image = inception_v3_preprocess_input(image)
     elif model.name.startswith('resnet50'):
         image = resnet50_preprocess_input(image)
+    elif model.name.startswith('tf_image'):
+        pass   # no preprocessing
     else:
         raise NotImplementedError(f"Preprocessing not implemented for {model.name}")
 
@@ -263,24 +278,25 @@ def predict_img(image: ndarray, model: Model, classes: Union[dict, list] = None,
 
     # predict the probability across all output classes
     preds = model.predict(image, verbose=1, callbacks=[
-        ProgbarLogger()
+        # ProgbarLogger()
     ])
     # convert the probabilities to class labels
+    return probability_to_class(preds, classes=classes, top=top)
+
+
+Prediction = namedtuple('Prediction', ['class_spec', 'probability'])
+
+
+def probability_to_class(predictions: ndarray, classes: Union[dict, list] = None, top=1) -> list:
+
+    # convert the probabilities to class labels
     results = []
-    for pred in preds:
-        top_indices = pred.argsort()[-top:]
+    for pred in predictions:
+        top_indices = pred.argsort()[-top:]     # sort indices taking top few
         if classes is not None:
-            result = [(classes[i], pred[i]) for i in top_indices]
+            result = [Prediction(classes[i], pred[i]) for i in top_indices]
         else:
             result = pred
         results.append(result)
 
     return results
-
-
-def check_model_misc_args(misc_args: dict) -> dict:
-    for arg in ['gsap_activation', 'gsap_dropout', 'log_activation', 'run1_optimizer', 'run1_loss', 'run2_optimizer',
-                'run2_loss']:
-        if arg not in misc_args:
-            raise ValueError(f"Missing {arg} argument")
-    return misc_args

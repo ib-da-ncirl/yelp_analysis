@@ -29,7 +29,7 @@ import tensorflow as tf
 from keras_preprocessing.image import DataFrameIterator
 
 
-def calc_step_size(data: Union[DataFrameIterator, tf.data.Dataset], info: SplitTotalBatch, set_name: str):
+def calc_step_size(data: Union[DataFrameIterator, tf.data.Dataset], info: SplitTotalBatch, set_name: Union[str, None]):
     if isinstance(data, DataFrameIterator):
         step_size = data.n // data.batch_size
         if (step_size * data.batch_size) < data.n:

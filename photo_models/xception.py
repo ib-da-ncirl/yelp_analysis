@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.keras.applications.xception import Xception
 from tensorflow.python.keras import Input
 
-from misc import get_optimiser, get_loss, check_model_misc_args
+from misc import get_optimiser, get_loss
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
@@ -17,7 +17,11 @@ def xception_eg(model_args: ModelArgs, verbose: bool = False):
 
     raise NotImplementedError("Xception implementation is untested, memory requirements exceed availability")
 
-    check_model_misc_args(model_args.misc_args)
+    misc_args = model_args.misc_args
+    for arg in ['dense_1', 'log_activation',
+                'run1_optimizer', 'run1_loss', 'run2_optimizer', 'run2_loss']:
+        if arg not in misc_args:
+            raise ValueError(f"Missing {arg} argument")
 
     # create the base pre-trained model
     # https://keras.io/api/applications/xception/

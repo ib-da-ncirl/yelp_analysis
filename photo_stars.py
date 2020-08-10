@@ -27,6 +27,7 @@ import pathlib
 import re
 import sys
 import json
+import multiprocessing
 from math import floor
 from timeit import default_timer as timer
 from typing import Union, List
@@ -44,7 +45,8 @@ from tensorflow.python.keras.models import Model
 from sklearn import metrics
 
 import photo_models
-from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, restrict_gpu_mem, ArgCtrl, predict_img
+from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, restrict_gpu_mem, ArgCtrl, predict_img, \
+    probability_to_class
 from photo_models import ModelArgs
 from photo_models.model_args import SplitTotalBatch
 from photo_models.model_misc import calc_step_size
@@ -57,8 +59,10 @@ CLASS_INDICES_FILENAME = 'class_indices.json'
 LABELS_FILENAME = 'labels.txt'
 BEST_MODEL_FOLDER = 'best_model'
 
-LAYER_PARAMS = ['gsap_units', 'gsap_activation', 'gsap2_units', 'gsap2_activation',
-                'gsap_dropout', 'gsap2_dropout', 'log_activation',
+LAYER_PARAMS = ['dropout_1', 'dropout_2',
+                'dense_1', 'dense_2',
+                'conv2D_1', 'conv2D_2', 'conv2D_3',
+                'log_activation',
                 'run1_optimizer', 'run2_optimizer',
                 'run1_loss', 'run2_loss', 'run2_inceptions_to_train', 'run2_train_bn']
 
@@ -165,6 +169,8 @@ def load_df(app_cfg: dict, run_cfg: dict, mode='train'):
     :param run_cfg:
     :return:
     """
+    print(f"Loading dataframe from '{run_cfg['dataset_path']}'")
+
     nrows = None
     if isinstance(run_cfg['photo_limit'], str):
         if run_cfg['photo_limit'].lower() != 'none':
@@ -243,11 +249,10 @@ def get_image_generator(run_cfg, augmentation: Union[List, bool] = True, verbose
         for imgen_arg in IMAGEDATAGENERATOR_ARGOPTPARAM:
             image_generator_args[imgen_arg.name] = default_or_val(imgen_arg, run_cfg)
 
-    common_args = {key: run_cfg[key] for key in ['x_col',
-                                                 # 'y_col',
+    common_args = {key: run_cfg[key] for key in ['x_col', 'y_col',
                                                  'class_mode', 'color_mode', 'batch_size', 'seed']
                    if key in run_cfg.keys()}
-    if 'ord_cols' in run_cfg.keys():
+    if common_args['class_mode'] == 'raw' and 'ord_cols' in run_cfg.keys():
         common_args['y_col'] = run_cfg['ord_cols']
     common_args['directory'] = run_cfg['photo_path']
     common_args['target_size'] = (run_cfg['image_height'], run_cfg['image_width'])
@@ -389,10 +394,7 @@ def do_train(app_cfg: dict, base_cfg: dict, start: float, timestamp: datetime):
         else:
             raise NotImplementedError(f"Class mode '{train_data.class_mode}' not implemented")
 
-        misc_args = {}
-        for misc in LAYER_PARAMS:
-            if misc in run_cfg:
-                misc_args[misc] = run_cfg[misc]
+        misc_args = {key: val for key, val in run_cfg.items() if key in LAYER_PARAMS}
 
         model_args = ModelArgs(run_cfg['device_name'], input_shape, input_tensor, run_cfg['class_count'],
                                train_data, val_data, run_cfg['epochs'], misc_args=misc_args)
@@ -439,8 +441,9 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
 
         if model is None:
             # load model weights
-            print(f"Loading model from {app_cfg['model_path']}")
-            model = keras.models.load_model(app_cfg['model_path'])
+            model_path = get_results_model_path(run_cfg, app_cfg, app_cfg['model_path'])
+            print(f"Loading model from {model_path}")
+            model = keras.models.load_model(model_path)
 
             if class_mode is None:
                 filepath = os.path.join(app_cfg['model_path'], CLASS_INDICES_FILENAME)
@@ -453,8 +456,11 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
                     print(f"Reading class indices from {filepath}")
                     with open(filepath) as fhin:
                         model_classes = json.load(fhin)
-                    # need to convert keys to int, as they were originally indices
-                    model_classes = {int(key): val for key, val in model_classes.items()}
+                    # need to convert keys to int, as they were originally indices, and
+                    # convert the category name 'x_y' to its star value x.y
+                    model_classes = {int(key): {'cat': val,
+                                                'stars': float(val.replace('_', '.'))
+                                                } for key, val in model_classes.items()}
 
         if dataset_df is None:
             # load dataset
@@ -464,7 +470,8 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
 
         # Data preparation
         run_cfg['shuffle'] = False
-        run_cfg['class_mode'] = None  # the generator will only yield batches of image data
+        if class_mode != 'categorical':
+            run_cfg['class_mode'] = None  # the generator will only yield batches of image data
 
         run_cfg.pop('ord_cols')
 
@@ -484,39 +491,38 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
         processed_cnt = 0
         success_cnt = 0
         if batch_mode:
-            results = model.predict(train_data, verbose=1,
-                                    steps=calc_step_size(train_data,
-                                                         SplitTotalBatch(0.0, len(dataset_df), run_cfg['batch_size']),
-                                                         None)
-                                    )
+            predictions = model.predict(train_data, verbose=1,
+                                        steps=calc_step_size(train_data,
+                                                             SplitTotalBatch(0.0, len(dataset_df),
+                                                                             run_cfg['batch_size']),
+                                                             None)
+                                        )
 
-            # while processed_cnt < num_train_images:
-            #     row = dataset_df.iloc[processed_cnt, :]
-            #     rounded = [int(round(x)) for x in results[processed_cnt]]
-            #     print(f"{processed_cnt:4d}: {row['photo_id']} - actual {row['stars']}\n"
-            #           f"    > actual {row['stars_ord']}  predicted {results[processed_cnt]}\n"
-            #           f"    >        {rounded}")
-            #     if row['stars_ord'] == rounded:
-            #         success_cnt += 1
-            #     processed_cnt += 1
+            results = probability_to_class(predictions, classes=model_classes)
 
-            y_actual_stars = (dataset_df['stars'] * 2).astype(int).values
-            y_predict_stars = np.sum(np.round(results).astype(int), axis=1) + 1
+            actual_half_stars = (dataset_df['stars'] * 2).astype(int).values
+
+            if class_mode == 'categorical':
+                predict_half_stars = np.array([int(pred[0].class_spec['stars'] * 2) for pred in results], dtype=int)
+            else:
+                predict_half_stars = np.sum(np.round(results).astype(int), axis=1) + 1
 
             print('Confusion Matrix')
-            print(metrics.confusion_matrix(y_actual_stars, y_predict_stars, normalize='true'))
+            print(metrics.confusion_matrix(actual_half_stars, predict_half_stars, normalize='true'))
 
             print('Accuracy Score')
-            print(metrics.accuracy_score(y_actual_stars, y_predict_stars))
+            print(metrics.accuracy_score(actual_half_stars, predict_half_stars))
 
         else:
             # A DataFrameIterator yields tuples of (x, y) where x is a numpy array containing a batch of images with
             # shape (batch_size, *target_size, channels) and y is a numpy array of corresponding labels.
-            processed_cnt = 0
             success_cnt = 0
             while processed_cnt < num_train_images:
                 # load next image
-                images, labels = next(train_data)
+                if train_arg['class_mode'] is None:
+                    images = next(train_data)
+                else:
+                    images, labels = next(train_data)
 
                 for i in range(len(images)):
 
@@ -531,12 +537,11 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
                         if class_mode == 'categorical':
                             line = ''
                             for pred in result:
-                                line = f"    > predicted {pred[0]}  probability {pred[1]}" \
-                                       f"{'Y' if row['stars'] == pred[0] else '-'}"
-                                if row['stars_cat'] == pred[0]:
+                                match = (row['stars'] == pred.class_spec['stars'])
+                                line = f"    > predicted {pred.class_spec['cat']}  probability {pred.probability} " \
+                                       f"{'Y' if match else '-'}\n"
+                                if match:
                                     success_cnt += 1
-                                else:  # raw
-                                    line = f"{line}{pred}  actual {row['stars_ord']}"
                         else:
                             rounded = [int(round(x)) for x in result]
                             line = f"    > actual {row['stars_ord']}  predicted {result}\n" \
@@ -547,7 +552,7 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
 
                     processed_cnt += 1
 
-        print(f"Correctly predicted {success_cnt} of {num_train_images} ({float(success_cnt) / num_train_images:.4f})")
+            print(f"Correctly predicted {success_cnt} of {num_train_images} ({float(success_cnt) / num_train_images:.4f})")
 
     if start is not None:
         duration(start, True)
@@ -585,9 +590,14 @@ def main():
             do_predict(app_cfg, base_cfg, start=start, timestamp=run_timestamp)
 
 
-def get_results_path(run_cfg: dict, app_cfg: dict, timestamp: datetime = None, create: bool = True):
-    results_path = re.sub(r"<results_path_root>", app_cfg['results_path_root'], run_cfg['results_path'])
+def get_results_model_path(run_cfg: dict, app_cfg: dict, path: str):
+    results_path = re.sub(r"<results_path_root>", app_cfg['results_path_root'], path)
     results_path = re.sub(r"<model_name>", run_cfg['name'], results_path)
+    return results_path
+
+
+def get_results_path(run_cfg: dict, app_cfg: dict, timestamp: datetime = None, create: bool = True):
+    results_path = get_results_model_path(run_cfg, app_cfg, run_cfg['results_path'])
     if timestamp is None:
         timestamp = datetime.datetime.now()
     # std strftime directives
@@ -628,15 +638,20 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
                 filepath = os.path.join(app_cfg['results_path_root'], f"result_log.csv")
                 print(f"Updating {filepath}")
 
-                def expand_param(param_dict, sep):
-                    param_dict_keys = sorted(param_dict.keys())
-                    return sep.join([f"{key2}={str(param_dict[key2])}"
-                                     if not isinstance(param_dict[key2], dict)
-                                     else expand_param(param_dict[key2], sep[0] * (len(sep) + 1))
-                                     for key2 in param_dict_keys])
+                def expand_param(param_dict, key, sep, level):
+                    param_obj = param_dict[key]
+                    if isinstance(param_obj, list):
+                        line = sep.join(param_obj)
+                    else:
+                        param_dict_keys = sorted(param_obj.keys())
+                        line = sep.join([f"{key2}={str(param_obj[key2])}"
+                                         if not isinstance(param_obj[key2], (list, dict))
+                                         else expand_param(param_obj, key2, sep[0] * (len(sep) + 1), level + 1)
+                                         for key2 in param_dict_keys])
+                    return line if level == 0 else f" {key}={line}"
 
                 keys = sorted(params.keys())
-                params_string = f'{",".join([str(params[key]) if not isinstance(params[key], dict) else expand_param(params[key], ";") for key in keys])}'
+                params_string = f'{",".join([str(params[key]) if not isinstance(params[key], (list, dict)) else expand_param(params, key, ";", 0) for key in keys])}'
 
                 new_file = not os.path.exists(filepath)
                 with open(filepath, "w" if new_file else "a") as fh:
@@ -686,8 +701,6 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
 def visualise_results(history):
     # Visualize training results
     # loosely based on code from https://www.tensorflow.org/tutorials/images/classification
-    epochs_range = range(history.params['epochs'])
-
     plt.figure(figsize=(8, 8))
 
     plots = [False, False]
@@ -713,6 +726,7 @@ def visualise_results(history):
     index = 1
     if plots[0]:
         plt.subplot(1, ncols, index)
+        epochs_range = range(len(acc))
         plt.plot(epochs_range, acc, label='Training Accuracy')
         plt.plot(epochs_range, val_acc, label='Validation Accuracy')
         plt.legend(loc='best')
@@ -721,6 +735,7 @@ def visualise_results(history):
 
     if plots[1]:
         plt.subplot(1, ncols, index)
+        epochs_range = range(len(loss))
         plt.plot(epochs_range, loss, label='Training Loss')
         plt.plot(epochs_range, val_loss, label='Validation Loss')
         plt.legend(loc='best')
@@ -738,7 +753,11 @@ def duration(start, verbose):
 
 
 if __name__ == '__main__':
-    main()
+    # sometimes tensorflow doesn't properly release gpu memory, and you need to reboot, (or switch to cpu)
+    # so thanks to https://github.com/tensorflow/tensorflow/issues/36465#issuecomment-582749350
+    process_eval = multiprocessing.Process(target=main)
+    process_eval.start()
+    process_eval.join()
 
 # This function will plot images in the form of a grid with 1 row and 5 columns where images are placed in each column.
 # def plotImages(images_arr):

@@ -20,7 +20,8 @@
 # SOFTWARE.
 
 from .misc import less_dangerous_eval, ArgOptParam, default_or_val
-from .misc_tf import pick_device, restrict_gpu_mem, get_optimiser, get_loss, check_model_misc_args, predict, predict_img
+from .misc_tf import pick_device, restrict_gpu_mem, get_optimiser, get_loss, predict, probability_to_class, \
+    predict_img, get_conv2d, get_dense
 from .arg_ctrl import ArgCtrl
 from .image import resize_keep_aspect
 
@@ -32,9 +33,11 @@ __all__ = [
     'restrict_gpu_mem',
     'get_optimiser',
     'get_loss',
-    'check_model_misc_args',
     'predict',
+    'probability_to_class',
     'predict_img',
+    'get_conv2d',
+    'get_dense',
     'ArgCtrl',
     'resize_keep_aspect',
 ]

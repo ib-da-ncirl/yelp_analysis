@@ -8,7 +8,7 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 import tensorflow as tf
 from tensorflow.python.keras.layers import BatchNormalization
 
-from misc import get_optimiser, get_loss, check_model_misc_args
+from misc import get_optimiser, get_loss
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
@@ -17,7 +17,11 @@ def resnet50_eg(model_args: ModelArgs, verbose=False):
 
     raise NotImplementedError("ResNet50 implementation is untested, allocation exceeds 10% of free system memory")
 
-    check_model_misc_args(model_args.misc_args)
+    misc_args = model_args.misc_args
+    for arg in ['dense_1', 'log_activation',
+                'run1_optimizer', 'run1_loss', 'run2_optimizer', 'run2_loss']:
+        if arg not in misc_args:
+            raise ValueError(f"Missing {arg} argument")
 
     # create the base pre-trained model
     # https://keras.io/api/applications/resnet/
@@ -32,7 +36,7 @@ def resnet50_eg(model_args: ModelArgs, verbose=False):
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     # let's add a fully-connected layer
-    x = Dense(model_args.misc_args['gsap_units'], activation=model_args.misc_args['gsap_activation'])(x)
+    x = Dense(**misc_args['dense_1'])(x)
     # and a logistic layer
     predictions = Dense(model_args.class_count, activation=model_args.misc_args['log_activation'])(x)
 
@@ -60,7 +64,7 @@ def resnet50_eg(model_args: ModelArgs, verbose=False):
         # be using the statistics from training data, instead of from inference.
         # Keras PR- https://github.com/keras-team/keras/pull/9965
 
-        if 'run2_train_bn' in model_args.misc_args and model_args.misc_args['run2_train_bn']:
+        if 'run2_train_bn' in model_args.misc_args.keys() and model_args.misc_args['run2_train_bn']:
             # train BatchNormalization layers
             for layer in base_model.layers:
                 layer.trainable = isinstance(layer, BatchNormalization)

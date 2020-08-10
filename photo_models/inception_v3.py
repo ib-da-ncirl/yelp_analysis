@@ -9,14 +9,18 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 import tensorflow as tf
 
-from misc import get_optimiser, get_loss, check_model_misc_args
+from misc import get_optimiser, get_loss
 from photo_models.model_args import ModelArgs
 from photo_models.model_misc import model_fit
 
 
 def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
 
-    misc_args = check_model_misc_args(model_args.misc_args)
+    misc_args = model_args.misc_args
+    for arg in ['dropout_1', 'dense_1', 'dropout_2', 'dense_2', 'log_activation',
+                'run1_optimizer', 'run1_loss', 'run2_optimizer', 'run2_loss']:
+        if arg not in misc_args:
+            raise ValueError(f"Missing {arg} argument")
 
     # create the base pre-trained model
     # https://keras.io/api/applications/inceptionv3/
@@ -31,12 +35,12 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     # add dropout to reduce overfitting
-    x = Dropout(misc_args['gsap_dropout'])(x)
+    x = Dropout(**misc_args['dropout_1'])(x)
     # add a fully-connected layer
-    x = Dense(misc_args['gsap_units'], activation=misc_args['gsap_activation'])(x)
-    x = Dropout(misc_args['gsap2_dropout'])(x)
+    x = Dense(**misc_args['dense_1'])(x)
+    x = Dropout(**misc_args['dropout_2'])(x)
     # add a fully-connected layer
-    x = Dense(misc_args['gsap2_units'], activation=misc_args['gsap_activation'])(x)
+    x = Dense(**misc_args['dense_2'])(x)
     # and a logistic layer
     predictions = Dense(model_args.class_count, activation=misc_args['log_activation'])(x)
 
@@ -91,8 +95,9 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
 
         # we train our model again (this time fine-tuning the top inception blocks
         # alongside the top Dense layers
+        history = model_fit(model, model_args, verbose=verbose, callbacks=model_args.callbacks)
 
-    return model_fit(model, model_args, verbose=verbose, callbacks=model_args.callbacks)
+    return history
 
 
 def inception_v3_eg(model_args: ModelArgs, verbose: bool = False):
