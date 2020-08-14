@@ -22,27 +22,27 @@
 #
 
 import datetime
+import json
+import multiprocessing
 import os
 import pathlib
 import re
 import sys
-import json
-import multiprocessing
 from math import floor
 from timeit import default_timer as timer
 from typing import Union, List
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from keras_preprocessing.image import DataFrameIterator
+from sklearn import metrics
 from tensorflow import keras
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras import Input
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.models import Model
-from sklearn import metrics
 
 import photo_models
 from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, restrict_gpu_mem, ArgCtrl, predict_img, \
@@ -50,6 +50,7 @@ from misc import less_dangerous_eval, ArgOptParam, default_or_val, pick_device, 
 from photo_models import ModelArgs
 from photo_models.model_args import SplitTotalBatch
 from photo_models.model_misc import calc_step_size
+from photo_models.tuner import RandomSearchTuner
 
 MIN_PYTHON = (3, 6)
 if sys.version_info < MIN_PYTHON:
@@ -66,6 +67,9 @@ LAYER_PARAMS = ['dropout_1', 'dropout_2',
                 'run1_optimizer', 'run2_optimizer',
                 'run1_loss', 'run2_loss', 'run2_inceptions_to_train', 'run2_train_bn']
 
+DO_EX_DEMO = ['do_training', 'do_prediction', 'do_kerastuning']     # do options excluding demo
+APP_LEVEL_CFGS = ['model_path', 'hyper_model_function', 'max_trials', 'executions_per_trial']
+
 
 def get_app_config(name: str, args: list):
     """
@@ -80,7 +84,9 @@ def get_app_config(name: str, args: list):
     arg_ctrl.add_option('r', 'run_model', 'Model to run', has_value=True)
     arg_ctrl.add_option('x', 'execute_model', 'Model to load and execute', has_value=True)
     arg_ctrl.add_option('t', 'do_training', 'Do model training', typ='flag')
+    arg_ctrl.add_option('k', 'do_kerastuning', 'Do Keras Tuner', typ='flag')
     arg_ctrl.add_option('p', 'do_prediction', 'Do prediction', typ='flag')
+    arg_ctrl.add_option('d', 'demo', 'Do demo', has_value=True)
     arg_ctrl.add_option('s', 'source', "Model source; 'img' = ImageDataGenerator or 'ds' = Dataset", has_value=True)
     arg_ctrl.add_option('b', 'random_batch', "If < 1, percent of available photo to randomly sample, "
                                              "else number to randomly sample",
@@ -93,11 +99,11 @@ def get_app_config(name: str, args: list):
 
     # check some basic configs exist
     for key in ['defaults', 'run_model']:  # required root level keys
-        if key not in app_cfg:
+        if key not in app_cfg.keys():
             error(f'Missing {key} configuration key')
     # move command line args to where they should be
     for key in ['dataset_path', 'photo_path', 'photo_limit']:
-        if key in app_cfg:
+        if key in app_cfg.keys():
             app_cfg['defaults'][key] = app_cfg[key]
             app_cfg.pop(key)
     # required default keys
@@ -105,12 +111,30 @@ def get_app_config(name: str, args: list):
                 'color_mode', 'batch_size', 'seed']:
         if key not in app_cfg['defaults'].keys():
             error(f"Missing '{key}' configuration key")
+    # check for conflicts
+
+    def all_there(key_list):
+        in_args = [a_key for a_key in key_list if a_key in app_cfg.keys() and app_cfg[a_key]]
+        return len(in_args) == len(key_list)
+
+    conflicting = ['do_training', 'do_kerastuning']
+    if all_there(conflicting):
+        error(f"Conflicting configuration keys specified, chose one of {conflicting}")
+    # check for ignore
+    conflicting = ['do_prediction', 'do_kerastuning']
+    if all_there(conflicting):
+        warning(f"Ignoring {conflicting[0]} when {conflicting[1]} specified")
+        app_cfg[conflicting[0]] = False
 
     return app_cfg
 
 
 def error(msg):
     sys.exit(f"Error: {msg}")
+
+
+def warning(msg):
+    print(f"Warning: {msg}")
 
 
 def load_model_cfg(models: list, run_model: str, run_cfg: dict):
@@ -148,6 +172,28 @@ def load_model_cfg(models: list, run_model: str, run_cfg: dict):
     return run_cfg, hierarchy
 
 
+def load_demo(preconfigs: list, demo: str, app_cfg: dict):
+    """
+    Load model config
+    :param preconfigs: List of demos
+    :param demo: Name of demo to run
+    :param app_cfg: Run config
+    :return:
+    """
+    for config in preconfigs:
+        if config['name'] == demo:
+            # overwrite app_cfg 'do' options with demo options
+            app_cfg.update({key: False for key in DO_EX_DEMO})  # turn off all do
+            app_cfg.update({key: val for key, val in config if key in DO_EX_DEMO})  # set do as per demo
+            ex_keys = ['name'] + DO_EX_DEMO
+            app_cfg['demo'] = {key: val for key, val in config if key not in ex_keys}
+            break
+    else:
+        error(f"Unable to find configuration for demo '{demo}")
+
+    return app_cfg
+
+
 def init_and_load(base_cfg, app_cfg, model_to_run):
     tf.keras.backend.clear_session()  # clear keras state
 
@@ -158,6 +204,11 @@ def init_and_load(base_cfg, app_cfg, model_to_run):
     # model config
     run_cfg, hierarchy = load_model_cfg(app_cfg['models'], model_to_run, run_cfg)
     print(f"Loaded model hierarchy: {'->'.join(hierarchy)}")
+
+    if 'demo' in app_cfg.keys():
+        # demo mode overwrite relevant keys
+        app_cfg.update({key: val for key, val in app_cfg['demo'] if key in APP_LEVEL_CFGS})
+        run_cfg.update({key: val for key, val in app_cfg['demo'] if key not in APP_LEVEL_CFGS})
 
     return run_cfg
 
@@ -312,11 +363,44 @@ def flow_from_df(source: str, image_generator: ImageDataGenerator, df: pd.DataFr
             count = floor(len(df) * (1 - args['validation_split']))
         else:
             count = len(df)
+        img_data_flow.prefetch(run_cfg['batch_size'])
 
     return img_data_flow, count
 
 
+def tune_model(model_args: ModelArgs, run_cfg: dict, app_cfg: dict):
+
+    # get model function and call it
+    method_to_call = getattr(photo_models, app_cfg['hyper_model_function'], None)
+    if method_to_call is None:
+        error(f"The specified model '{app_cfg['hyper_model_function']} could not be found")
+
+    with tf.device(model_args.device_name):
+        print(f"Using '{model_args.device_name}'")
+
+        tuner = RandomSearchTuner(
+                method_to_call(model_args),
+                'val_accuracy',
+                app_cfg['max_trials'],
+                model_args,
+                executions_per_trial=app_cfg['executions_per_trial'],
+                directory=get_storage_path(run_cfg, app_cfg, app_cfg['tuning_directory']))
+
+        tuner.search_space_summary()
+        tuner.search()
+        tuner.results_summary()
+
+
 def do_train(app_cfg: dict, base_cfg: dict, start: float, timestamp: datetime):
+    """
+    Do training
+    :param app_cfg: Application config
+    :param base_cfg: Models base configuration
+    :param start:
+    :param timestamp:
+    :return:
+    """
+
     # model list
     if isinstance(app_cfg['run_model'], str):
         models_run_list = [app_cfg['run_model']]
@@ -410,25 +494,35 @@ def do_train(app_cfg: dict, base_cfg: dict, start: float, timestamp: datetime):
         if app_cfg['verbose']:
             print(f"{params}")
 
-        # get model function and call it
-        method_to_call = getattr(photo_models, run_cfg['function'], None)
-        if method_to_call is None:
-            error(f"The specified model '{run_cfg['function']} could not be found")
-        history = method_to_call(model_args, verbose=app_cfg['verbose'])
+        if app_cfg['do_kerastuning']:
+            tune_model(model_args, run_cfg, app_cfg)
 
-        params['duration'] = f"{duration(start, True):.1f}"
+        else:
+            # get model function and call it
+            method_to_call = getattr(photo_models, run_cfg['function'], None)
+            if method_to_call is None:
+                error(f"The specified model '{run_cfg['function']} could not be found")
+            history = method_to_call(model_args, verbose=app_cfg['verbose'])
 
-        if app_cfg['do_prediction'] and verify_df is not None:
-            do_predict(app_cfg, base_cfg, model=history.model, ord_cols=ord_cols, dataset_df=verify_df,
-                       class_mode=train_data.class_mode, model_classes=model_classes)
+            params['duration'] = f"{duration(start, True):.1f}"
 
-        show_results(history, run_cfg, app_cfg, params, timestamp=timestamp)
+            if app_cfg['do_prediction'] and verify_df is not None:
+                do_predict(app_cfg, base_cfg, model=history.model, ord_cols=ord_cols, dataset_df=verify_df,
+                           class_mode=train_data.class_mode, model_classes=model_classes)
+
+            show_results(history, run_cfg, app_cfg, params, timestamp=timestamp)
 
 
 def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: list = None,
                dataset_df: pd.DataFrame = None, class_mode=None, model_classes=None, start: float = None,
                timestamp: datetime = None,
                batch_mode: bool = True):
+    """
+    Do prediction
+    :param app_cfg: Application config
+    :param base_cfg: Models base configuration
+    :return:
+    """
     # model list
     if isinstance(app_cfg['run_model'], str):
         models_run_list = [app_cfg['run_model']]
@@ -441,7 +535,7 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
 
         if model is None:
             # load model weights
-            model_path = get_results_model_path(run_cfg, app_cfg, app_cfg['model_path'])
+            model_path = get_storage_path(run_cfg, app_cfg, app_cfg['model_path'])
             print(f"Loading model from {model_path}")
             model = keras.models.load_model(model_path)
 
@@ -580,28 +674,39 @@ def main():
     base_cfg['device_name'], fallback = pick_device(app_cfg['modelling_device'])
     if fallback:
         print(f"Device '{app_cfg['modelling_device']}' not available")
-    print(f"Using '{base_cfg['device_name']}'")
+    print(f"Selected '{base_cfg['device_name']}'")
 
-    if app_cfg['do_training']:
+    is_demo = 'demo' in app_cfg.keys()
+    if is_demo:
+        app_cfg = load_demo(app_cfg['preconfigured'], app_cfg['demo'], app_cfg)
+
+    def demo_overwrite(key):
+        if is_demo:
+            app_cfg[key] = app_cfg['demo'][key]
+
+    if app_cfg['do_training'] or app_cfg['do_kerastuning']:
+        demo_overwrite('run_model')     # demo mode overwrite run_model if required
         if 'run_model' in app_cfg:
             do_train(app_cfg, base_cfg, start, run_timestamp)
     elif app_cfg['do_prediction']:
+        demo_overwrite('model_path')     # demo mode overwrite model_path if required
         if 'model_path' in app_cfg:
             do_predict(app_cfg, base_cfg, start=start, timestamp=run_timestamp)
 
 
-def get_results_model_path(run_cfg: dict, app_cfg: dict, path: str):
-    results_path = re.sub(r"<results_path_root>", app_cfg['results_path_root'], path)
-    results_path = re.sub(r"<model_name>", run_cfg['name'], results_path)
-    return results_path
-
-
-def get_results_path(run_cfg: dict, app_cfg: dict, timestamp: datetime = None, create: bool = True):
-    results_path = get_results_model_path(run_cfg, app_cfg, run_cfg['results_path'])
+def get_storage_path(run_cfg: dict, app_cfg: dict, path: str, timestamp=None):
+    store_path = re.sub(r"<results_path_root>", app_cfg['results_path_root'], path)
+    store_path = re.sub(r"<model_name>", run_cfg['name'], store_path)
+    store_path = re.sub(r"<hyper_model_function>", app_cfg['hyper_model_function'], store_path)
     if timestamp is None:
         timestamp = datetime.datetime.now()
     # std strftime directives
-    results_path = re.sub(r"{(.*)}", lambda m: timestamp.strftime(m.group(1)), results_path)
+    store_path = re.sub(r"{(.*)}", lambda m: timestamp.strftime(m.group(1)), store_path)
+    return store_path
+
+
+def get_results_path(run_cfg: dict, app_cfg: dict, timestamp: datetime = None, create: bool = True):
+    results_path = get_storage_path(run_cfg, app_cfg, run_cfg['results_path'], timestamp=timestamp)
     if create:
         pathlib.Path(results_path).mkdir(parents=True, exist_ok=True)
     return results_path
@@ -680,6 +785,9 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
 
                 for i, layer in enumerate(history.model.layers):
                     fh.write(f"{i}\t{layer.name}\n")
+
+            filepath = os.path.join(results_path, "model.png")
+            keras.utils.plot_model(history.model, show_shapes=True, to_file=filepath)
 
         if run_cfg['save_model']:
             filepath = os.path.join(results_path, history.model.name)

@@ -19,21 +19,30 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .tf_image_eg import tf_image_eg
+from .tf_image_eg import tf_image_eg, tf_image_eg_qsvm, tf_image_tuning
 from .inception_v3 import inception_v3_eg, inception_v3_eg_v2
 from .resnet50 import resnet50_eg
 from .alexnet import alexnet
 from .xception import xception_eg
+from .vgg import vgg16_eg
 from .model_args import ModelArgs
+from .tuner import RandomSearchTuner
+from .fashion import fashion_1, fashion1_tuning
 
 # Add the names of model functions to this list.
 # Don't forget to import the function above as well
 __all__ = [
     'ModelArgs',
     'tf_image_eg',
+    'tf_image_eg_qsvm',
+    'tf_image_tuning',
     'inception_v3_eg',
     'inception_v3_eg_v2',
     'resnet50_eg',
     'alexnet',
     'xception_eg',
+    'vgg16_eg',
+    'RandomSearchTuner',
+    'fashion_1',
+    'fashion1_tuning',
 ]

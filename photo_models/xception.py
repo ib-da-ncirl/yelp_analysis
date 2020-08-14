@@ -18,8 +18,7 @@ def xception_eg(model_args: ModelArgs, verbose: bool = False):
     raise NotImplementedError("Xception implementation is untested, memory requirements exceed availability")
 
     misc_args = model_args.misc_args
-    for arg in ['dense_1', 'log_activation',
-                'run1_optimizer', 'run1_loss', 'run2_optimizer', 'run2_loss']:
+    for arg in ['run1_optimizer', 'run1_loss', 'run2_optimizer', 'run2_loss']:
         if arg not in misc_args:
             raise ValueError(f"Missing {arg} argument")
 
@@ -44,6 +43,7 @@ def xception_eg(model_args: ModelArgs, verbose: bool = False):
     model = Model(inputs, outputs)
 
     with tf.device(model_args.device_name):
+        print(f"Using '{model_args.device_name}'")
 
         # training run 1
         # compile the model (should be done *after* setting layers to non-trainable)

@@ -65,6 +65,7 @@ def model_fit(model: Model, model_args: ModelArgs, callbacks=None, verbose: bool
         epochs=model_args.epochs,
         validation_data=model_args.val_data,
         validation_steps=step_size_valid,   # total_val // batch_size
+        batch_size=model_args.batch_size,
         callbacks=callbacks
     )
 

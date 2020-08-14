@@ -211,10 +211,12 @@ def get_loss(setting: Union[str, dict]):
     return loss
 
 
-def get_conv2d(args, input_shape):
+def get_conv2d(args, input_shape=None):
     # filters and kernel are positional args
     kwargs = {key: val for key, val in args.items() if key not in ['filters', 'kernel']}
-    return Conv2D(args['filters'], args['kernel'], input_shape=input_shape, **kwargs)
+    if input_shape is not None:
+        kwargs['input_shape'] = input_shape
+    return Conv2D(args['filters'], args['kernel'], **kwargs)
 
 
 def get_dense(args):

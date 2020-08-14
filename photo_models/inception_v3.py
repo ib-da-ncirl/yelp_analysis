@@ -53,6 +53,7 @@ def inception_v3_eg_v2(model_args: ModelArgs, verbose: bool = False):
         layer.trainable = False
 
     with tf.device(model_args.device_name):
+        print(f"Using '{model_args.device_name}'")
 
         # training run 1
         # compile the model (should be done *after* setting layers to non-trainable)
@@ -125,6 +126,7 @@ def inception_v3_eg(model_args: ModelArgs, verbose: bool = False):
         layer.trainable = False
 
     with tf.device(model_args.device_name):
+        print(f"Using '{model_args.device_name}'")
 
         # compile the model (should be done *after* setting layers to non-trainable)
         model.compile(optimizer='rmsprop', loss='categorical_crossentropy',
@@ -167,12 +169,6 @@ def inception_v3_eg(model_args: ModelArgs, verbose: bool = False):
         # we train our model again (this time fine-tuning the top 2 inception blocks
         # alongside the top Dense layers
 
-        # history = model.fit(
-        #     model_args.train_data,
-        #     steps_per_epoch=step_size_train,  # total_train // batch_size,
-        #     epochs=model_args.epochs,
-        #     validation_data=model_args.val_data,
-        #     validation_steps=step_size_valid  # total_val // batch_size
-        # )
+        history = model_fit(model, model_args, verbose=verbose)
 
-    return model_fit(model, model_args, verbose=verbose)
+    return history

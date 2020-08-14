@@ -29,6 +29,7 @@ setuptools.setup(
       'numpy>=1.18.5',
       'matplotlib>=3.2.2'
       'keras>=2.4.3',
+      'keras-tuner>=1.0.1',
       'scikit-learn>=0.23.1',
     ],
     dependency_links=[

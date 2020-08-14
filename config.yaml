@@ -3,6 +3,7 @@
 # basic options are; '/cpu:0': the CPU of your machine, or '/GPU:0': Short-hand notation for the first GPU of your machine that is visible to TensorFlow.
 # setting 'auto' will pick the available device with the most memory
 modelling_device: auto
+#modelling_device: /cpu:0
 
 # set maximum memory allocation for gpu in MB
 gpu_memory_limit: 1024
@@ -15,27 +16,62 @@ results_path_root: ./results
 
 # specify the model to run, the name of an entry in the models list
 #run_model: tf_image_eg
-run_model: tf_image_eg_hflip
+#run_model: tf_image_eg_hflip
+#run_model: tf_image_eg_hflip_qsvm
+run_model: fashion_1
 #run_model: inception_v3_eg
 #run_model: inception_v3_eg_hflip
 #run_model: inception_v3_eg_hflip_cat_v2
 #run_model: inception_v3_eg_hflip_ord_v2
 #run_model: alexnet
+#run_model: resnet50_eg
 #run_model: xception_eg
+#run_model: vgg16_eg
 # or list of models to run
 #run_model:
 #  - tf_image_eg_hflip
-#  - inception_v3_eg_hflip
+#  - inception_v3_eg_hflip_cat_v2
 
 model_path: ./results/tf_image_eg_hflip/200810_1740/tf_image_tl
 #model_path: ./results/inception_v3_eg_hflip_ord_v2/200810_1309/inception_v3_tl
 
-# -------------------------------------------------------------------------------------------------------
-# When doing prediction only *** MAKE SURE 'RUN_MODEL' IS COMPATIBLE WITH THE MODEL FROM 'MODEL_PATH' ***
-# -------------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------
+# When doing prediction only *** MAKE SURE 'run_model' IS COMPATIBLE WITH THE MODEL FROM 'model_path' ***
+# When doing tuning          *** MAKE SURE 'run_model' IS COMPATIBLE WITH THE MODEL FROM 'hyper_model_function' ***
+# TODO make configuration easier
+# -----------------------------------------------------------------------------------------------------------------
 
 do_training: false
-do_prediction: true
+do_prediction: false
+do_kerastuning: true
+
+hyper_model_function: fashion1_tuning
+max_trials: 3
+executions_per_trial: 3
+tuning_directory: <results_path_root>/tuning/<hyper_model_function>/{%y%m%d_%H%M}
+
+
+# preconfigured settings for demos
+preconfigured:
+  - name: tuning_demo
+    do_kerastuning: true
+
+    run_model: fashion_1
+    hyper_model_function: fashion1_tuning
+    max_trials: 1
+    executions_per_trial: 1
+
+  - name: prediction_demo
+    do_prediction: true
+
+    run_model: tf_image_eg_hflip
+    model_path: ./results/tf_image_eg_hflip/200810_1740/tf_image_tl
+
+  - name: training_demo
+    do_training: true
+
+    run_model: tf_image_eg_hflip
+
 
 
 defaults:
@@ -54,7 +90,7 @@ defaults:
   epochs: 15
 
   # path to the photos folder
-  photo_path: ../project/dataset/yelp_photos/photos
+  photo_path: ../project/dataset/yelp_photos/photos150_100
   # default image width & height, may be overwritten in model definition by setting 'image_width' & 'image_height'
   # most images are 600px x 400px, so reduce keeping aspect ratio
   image_width: 150
@@ -177,7 +213,8 @@ models:
       name: categorical_crossentropy
       from_logits: true
 
-  #    epochs: 15
+    epochs: 15
+
   - name: tf_image_eg_hflip
     desc: TensorFlow Image Classification Tutorial (Augmentation)
     parent: tf_image_eg
@@ -215,6 +252,17 @@ models:
 #    zca_epsilon: 1e-6
 #    # Boolean. Apply ZCA whitening.
 #    zca_whitening: false
+
+  - name: tf_image_eg_hflip_qsvm
+    desc: TensorFlow Image Classification Tutorial (Augmentation+QuasiSVM)
+    parent: tf_image_eg_hflip
+
+    function: tf_image_eg_qsvm
+
+  - name: fashion_1
+    desc: Basic model
+    function: fashion_1
+
 
     # InceptionV3
     # -----------
@@ -321,7 +369,7 @@ models:
     # training run 2 loss; see 'Loss functions' above
     run2_loss: categorical_crossentropy
 
-    epochs: 1
+#    epochs: 1
 
 
 
@@ -375,11 +423,17 @@ models:
     # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: rmsprop
 
+    # training run 1 loss; see 'Loss functions' above
+    run1_loss: categorical_crossentropy
+
     # training run 2 optimizer, see 'Optimiser functions' above
     run2_optimizer:
       name: sgd
       lr: 0.0001
       momentum: 0.9
+
+    # training run 1 loss; see 'Loss functions' above
+    run2_loss: categorical_crossentropy
 
     # training run 2, train BatchNormalization layers in base model
     run2_train_bn: true
@@ -433,11 +487,53 @@ models:
     # training run 1 optimizer, see 'Optimiser functions' above
     run1_optimizer: rmsprop
 
+    # training run 1 loss; see 'Loss functions' above
+    run1_loss: categorical_crossentropy
+
     # training run 2 optimizer, see 'Optimiser functions' above
     run2_optimizer:
       name: sgd
       lr: 0.0001
       momentum: 0.9
+
+    # training run 1 loss; see 'Loss functions' above
+    run2_loss: categorical_crossentropy
+
+    # VGG16
+    # --------
+  - name: vgg16_eg
+    desc: Fine-tune VGG16 on a new set of classes
+    # function from models package to call
+    function: vgg16_eg
+    photo_path: ../project/dataset/yelp_photos/photos224
+    # original ResNet images were 224px x 224px, so use resized copies keeping aspect ratio
+    image_width: 224
+    image_height: 224
+
+    epochs: 1
+
+    dense_1:
+      units: 1024
+      # activation function, see 'Activation functions' above
+      activation: relu
+
+    # logistic layer activation function, see 'Activation functions' above
+    log_activation: softmax
+
+    # training run 1 optimizer, see 'Optimiser functions' above
+    run1_optimizer: rmsprop
+
+    # training run 1 loss; see 'Loss functions' above
+    run1_loss: categorical_crossentropy
+
+    # training run 2 optimizer, see 'Optimiser functions' above
+    run2_optimizer:
+      name: sgd
+      lr: 0.0001
+      momentum: 0.9
+
+    # training run 1 loss; see 'Loss functions' above
+    run2_loss: categorical_crossentropy
 
 
 

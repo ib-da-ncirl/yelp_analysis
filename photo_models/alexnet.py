@@ -50,6 +50,7 @@ def alexnet(model_args: ModelArgs, verbose=False):
     ])
 
     with tf.device(model_args.device_name):
+        print(f"Using '{model_args.device_name}'")
 
         # training run 1
         # compile the model (should be done *after* setting layers to non-trainable)
