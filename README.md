@@ -373,7 +373,7 @@ results in the files
 
     Model results summary. Updated with final result and details for each model run. 
 
-- `./results/my_model/200723_0909/<my_modelname>
+- `./results/my_model/200723_0909/<my_modelname>`
 
     Saved model data
 
