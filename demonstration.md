@@ -1,4 +1,4 @@
-# yelp_analysis setup
+# yelp_analysis demonstration
 The following steps outline the procedure to set up the project.
 
 ## Setup from scratch
@@ -13,7 +13,7 @@ The following steps outline the procedure to set up the project.
 
     This will:
     - extract the tar files
-    - download `json_to_csv_converter.py`, the json to csv converter script
+    - download `json_to_csv_converter.py`, the json to csv converter script if required
     - convert the raw json files to csv files
     - generate the required dataset files for analysis
 
@@ -35,7 +35,7 @@ Please see the [photo_stars usage](README.md#usage-1) for more details of argume
 
         python3 photo_stars.py -l 8000 -d prediction_demo
 
-  - Tuning
+- Tuning
 
     Runs a tuning demonstration limited to 8000 photos. 
     
