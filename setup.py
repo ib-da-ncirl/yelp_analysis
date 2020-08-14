@@ -31,6 +31,8 @@ setuptools.setup(
       'keras>=2.4.3',
       'keras-tuner>=1.0.1',
       'scikit-learn>=0.23.1',
+      'pydot>=1.3.0',
+      'pygraphviz>=1.3',
     ],
     dependency_links=[
     ],

@@ -61,6 +61,9 @@ preconfigured:
     max_trials: 1
     executions_per_trial: 1
 
+    msg: This demo will take many hours to run depending on the resources available.
+    proceed: query
+
   - name: prediction_demo
     do_prediction: true
 
@@ -71,6 +74,8 @@ preconfigured:
     do_training: true
 
     run_model: tf_image_eg_hflip
+    # number of epochs to run a model
+    epochs: 3
 
 
 

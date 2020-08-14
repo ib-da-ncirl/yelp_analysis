@@ -43,7 +43,7 @@ class ArgCtrl:
         self._name = name
 
     def add_option(self, short_name: str, long_name: str, description: str, has_value: bool = False,
-                   required: bool = False, dfl_value=None, typ='str'):
+                   required: bool = False, dfl_value=None, typ=str):
         """
         Add an option
         :param short_name: Short name

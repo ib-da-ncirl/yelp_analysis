@@ -184,9 +184,18 @@ def load_demo(preconfigs: list, demo: str, app_cfg: dict):
         if config['name'] == demo:
             # overwrite app_cfg 'do' options with demo options
             app_cfg.update({key: False for key in DO_EX_DEMO})  # turn off all do
-            app_cfg.update({key: val for key, val in config if key in DO_EX_DEMO})  # set do as per demo
+            app_cfg.update({key: val for key, val in config.items() if key in DO_EX_DEMO})  # set do as per demo
             ex_keys = ['name'] + DO_EX_DEMO
-            app_cfg['demo'] = {key: val for key, val in config if key not in ex_keys}
+            app_cfg['demo'] = {key: val for key, val in config.items() if key not in ex_keys}
+
+            def demo_overwrite(key):
+                app_cfg[key] = app_cfg['demo'][key]
+
+            if app_cfg['do_training'] or app_cfg['do_kerastuning']:
+                demo_overwrite('run_model')
+            elif app_cfg['do_prediction']:
+                demo_overwrite('run_model')
+                demo_overwrite('model_path')
             break
     else:
         error(f"Unable to find configuration for demo '{demo}")
@@ -207,8 +216,8 @@ def init_and_load(base_cfg, app_cfg, model_to_run):
 
     if 'demo' in app_cfg.keys():
         # demo mode overwrite relevant keys
-        app_cfg.update({key: val for key, val in app_cfg['demo'] if key in APP_LEVEL_CFGS})
-        run_cfg.update({key: val for key, val in app_cfg['demo'] if key not in APP_LEVEL_CFGS})
+        app_cfg.update({key: val for key, val in app_cfg['demo'].items() if key in APP_LEVEL_CFGS})
+        run_cfg.update({key: val for key, val in app_cfg['demo'].items() if key not in APP_LEVEL_CFGS})
 
     return run_cfg
 
@@ -652,12 +661,9 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
         duration(start, True)
 
 
-def main():
+def main_run(app_cfg: dict):
     start = timer()
     run_timestamp = datetime.datetime.now()
-
-    # load app config
-    app_cfg = get_app_config(sys.argv[0], sys.argv[1:])
 
     tf.debugging.set_log_device_placement(False if 'tf_log_device_placement' not in app_cfg
                                           else app_cfg['tf_log_device_placement'])
@@ -676,22 +682,43 @@ def main():
         print(f"Device '{app_cfg['modelling_device']}' not available")
     print(f"Selected '{base_cfg['device_name']}'")
 
+    if app_cfg['do_training'] or app_cfg['do_kerastuning']:
+        if 'run_model' in app_cfg:
+            do_train(app_cfg, base_cfg, start, run_timestamp)
+    elif app_cfg['do_prediction']:
+        if 'model_path' in app_cfg:
+            do_predict(app_cfg, base_cfg, start=start, timestamp=run_timestamp)
+
+
+def main():
+    # load app config
+    app_cfg = get_app_config(sys.argv[0], sys.argv[1:])
+
     is_demo = 'demo' in app_cfg.keys()
     if is_demo:
         app_cfg = load_demo(app_cfg['preconfigured'], app_cfg['demo'], app_cfg)
 
-    def demo_overwrite(key):
-        if is_demo:
-            app_cfg[key] = app_cfg['demo'][key]
+        if 'msg' in app_cfg['demo'].keys():
+            print("*" * len(app_cfg['demo']['msg']))
+            print(app_cfg['demo']['msg'])
+            print("*" * len(app_cfg['demo']['msg']))
+            if 'proceed' in app_cfg['demo'].keys():
+                if app_cfg['demo']['proceed'] == 'query':
+                    proceed = ""
+                    while len(proceed) == 0:
+                        proceed = input("Do you wish to proceed [y/n]: ")
+                        if len(proceed):
+                            proceed = proceed.lower()
+                            if proceed != 'y' and proceed != 'n':
+                                proceed = ""
+                    if proceed == 'n':
+                        exit(0)
 
-    if app_cfg['do_training'] or app_cfg['do_kerastuning']:
-        demo_overwrite('run_model')     # demo mode overwrite run_model if required
-        if 'run_model' in app_cfg:
-            do_train(app_cfg, base_cfg, start, run_timestamp)
-    elif app_cfg['do_prediction']:
-        demo_overwrite('model_path')     # demo mode overwrite model_path if required
-        if 'model_path' in app_cfg:
-            do_predict(app_cfg, base_cfg, start=start, timestamp=run_timestamp)
+    # sometimes tensorflow doesn't properly release gpu memory, and you need to reboot, (or switch to cpu)
+    # so thanks to https://github.com/tensorflow/tensorflow/issues/36465#issuecomment-582749350
+    process_eval = multiprocessing.Process(target=main_run, args=(app_cfg,))
+    process_eval.start()
+    process_eval.join()
 
 
 def get_storage_path(run_cfg: dict, app_cfg: dict, path: str, timestamp=None):
@@ -725,7 +752,7 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
             if run_cfg['save_val_loss']:
                 # save val/loss graph image
                 filepath = os.path.join(results_path, f"{run_cfg['name']}.png")
-                print(f"Saving {filepath}")
+                print(f"Saving '{filepath}'")
                 plt.savefig(filepath)
 
                 # save val/loss data
@@ -736,12 +763,12 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
                     'val_loss': val_loss
                 })
                 filepath = os.path.join(results_path, f"{run_cfg['name']}.csv")
-                print(f"Saving {filepath}")
+                print(f"Saving '{filepath}'")
                 df.to_csv(filepath)
 
                 # save val/loss data to overall results
                 filepath = os.path.join(app_cfg['results_path_root'], f"result_log.csv")
-                print(f"Updating {filepath}")
+                print(f"Updating '{filepath}'")
 
                 def expand_param(param_dict, key, sep, level):
                     param_obj = param_dict[key]
@@ -779,7 +806,7 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
 
         if run_cfg['save_summary']:
             filepath = os.path.join(results_path, "summary.txt")
-            print(f"Saving {filepath}")
+            print(f"Saving model summary to '{filepath}'")
             with open(filepath, "w") as fh:
                 history.model.summary(print_fn=lambda l: fh.write(l + '\n'))
 
@@ -787,21 +814,22 @@ def show_results(history, run_cfg: dict, app_cfg: dict, params: dict, timestamp:
                     fh.write(f"{i}\t{layer.name}\n")
 
             filepath = os.path.join(results_path, "model.png")
+            print(f"Saving model plot to '{filepath}'")
             keras.utils.plot_model(history.model, show_shapes=True, to_file=filepath)
 
         if run_cfg['save_model']:
             filepath = os.path.join(results_path, history.model.name)
-            print(f"Saving model to {filepath}")
+            print(f"Saving model to '{filepath}'")
             history.model.save(filepath)
 
             if 'val_class_indices' in params:
                 filepath = os.path.join(results_path, history.model.name, CLASS_INDICES_FILENAME)
-                print(f"Saving class indices to {filepath}")
+                print(f"Saving class indices to '{filepath}'")
                 with open(filepath, 'w') as fhout:
                     json.dump(params['val_class_indices'], fhout)
             elif 'labels' in params:
                 filepath = os.path.join(results_path, history.model.name, LABELS_FILENAME)
-                print(f"Saving labels to {filepath}")
+                print(f"Saving labels to '{filepath}'")
                 with open(filepath, 'w') as fhout:
                     fhout.write(f"{str(params['labels'])}\n")
 
@@ -861,11 +889,7 @@ def duration(start, verbose):
 
 
 if __name__ == '__main__':
-    # sometimes tensorflow doesn't properly release gpu memory, and you need to reboot, (or switch to cpu)
-    # so thanks to https://github.com/tensorflow/tensorflow/issues/36465#issuecomment-582749350
-    process_eval = multiprocessing.Process(target=main)
-    process_eval.start()
-    process_eval.join()
+    main()
 
 # This function will plot images in the form of a grid with 1 row and 5 columns where images are placed in each column.
 # def plotImages(images_arr):
