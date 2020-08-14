@@ -136,7 +136,8 @@ Install dependencies via
       -cs CSV_SIZE, --csv_size CSV_SIZE
                             max csv field size in kB; default 20kB
       -ps PHOTO_SIZE, --photo_size PHOTO_SIZE
-                            required photo size in pixels
+                            required photo size in pixels or 'width,height'; e.g.
+                            '299' or '150,100'
       -v, --verbose         Verbose mode
   
 #### Example command lines

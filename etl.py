@@ -32,6 +32,7 @@ import sys
 import csv
 import re
 from math import ceil
+from typing import Union
 
 import pandas as pd
 import dask.dataframe as dd
@@ -720,7 +721,7 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     print(f"Processing photo details")
     resize = ('photo_folder_resize' in arg_dict and 'photo_size' in arg_dict)
     if resize:
-        print(f"  Including resizing photos to {arg_dict['photo_size']}x{arg_dict['photo_size']}px in "
+        print(f"  Including resizing photos to {photo_size_str(arg_dict['photo_size'])} in "
               f"{arg_dict['photo_folder_resize']}")
         Path(arg_dict['photo_folder_resize']).mkdir(parents=True, exist_ok=True)
 
@@ -773,6 +774,16 @@ def generate_photo_set(biz_path, photo_csv_path, id_lst, photo_folder, out_path,
     save_csv(photo_set_df, out_path, index=False)
 
 
+def photo_size_str(p_size: Union[int, tuple]):
+    if isinstance(p_size, int):
+        width = p_size
+        height = width
+    else:
+        width = p_size[0]
+        height = p_size[1]
+    return f"{width}x{height}px"
+
+
 def resize_photo_set(dataset_csv_path, photo_folder, arg_dict=None):
     """
     Generate a csv for the photo dataset
@@ -784,8 +795,7 @@ def resize_photo_set(dataset_csv_path, photo_folder, arg_dict=None):
 
     photo_set_df, _, start = load_csv('photos', dataset_csv_path, arg_dict=arg_dict)
 
-    print(f"Resizing photos to {arg_dict['photo_size']}x{arg_dict['photo_size']}px in "
-          f"{arg_dict['photo_folder_resize']}")
+    print(f"Resizing photos to {photo_size_str(arg_dict['photo_size'])} in {arg_dict['photo_folder_resize']}")
 
     Path(arg_dict['photo_folder_resize']).mkdir(parents=True, exist_ok=True)
 
@@ -921,8 +931,8 @@ if __name__ == "__main__":
                         help=f"max csv field size in kB; default {hex(csv.field_size_limit() // 0x1000)[2:]}kB",
                         type=int, default=argparse.SUPPRESS)
     parser.add_argument('-ps', '--photo_size',
-                        help=f"required photo size in pixels",
-                        type=int, default=argparse.SUPPRESS)
+                        help=f"required photo size in pixels or 'width,height'; e.g. '299' or '150,100'",
+                        type=str, default=argparse.SUPPRESS)
     parser.add_argument('-v', '--verbose', help='Verbose mode', action='store_true')
 
     args = parser.parse_args()
@@ -1010,8 +1020,16 @@ if __name__ == "__main__":
            ('photo_size' not in args and len(args.photo_folder_resize)):
             arg_error(parser, f"Options -pfr/--photo_folder_resize and -ps/--photo_size are both required")
         if 'photo_size' in args and len(args.photo_folder_resize):
+            if ',' in args.photo_size:
+                # different desired width & height
+                size_split = args.photo_size.split(',')
+                if len(size_split) != 2:
+                    arg_error(parser, f"Invalid -ps/--photo_size option")
+                photo_size = tuple([int(x) for x in size_split])
+            else:
+                photo_size = int(args.photo_size)
+            kwarg_dict['photo_size'] = photo_size
             kwarg_dict['photo_folder_resize'] = paths['photo_folder_resize']
-            kwarg_dict['photo_size'] = args.photo_size
     if 'random_select' in args or 'select_on' in args:
         if (('random_select' in args and 'select_on' not in args) or
                 ('random_select' not in args and 'select_on' in args)):

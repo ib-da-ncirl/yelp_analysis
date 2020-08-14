@@ -21,10 +21,12 @@
 #
 
 import os
+from typing import Union
+
 from PIL import Image, ImageOps
 
 
-def resize_keep_aspect(path: str, desired_size: int, out_folder: str):
+def resize_keep_aspect(path: str, desired_size: Union[int, tuple], out_folder: str):
     """
     Resize an image keeping the aspect ratio; resultant image will be 'desired_size' * 'desired_size' pixels
     :param path: Path to image
@@ -34,10 +36,16 @@ def resize_keep_aspect(path: str, desired_size: int, out_folder: str):
     # Based on https://jdhao.github.io/2017/11/06/resize-image-to-square-with-padding/
 
     im = Image.open(path)
-    old_size = im.size  # old_size[0] is in (width, height) format
+    old_size = im.size  # old_size is in (width, height) format
 
-    ratio = float(desired_size) / max(old_size)
+    if isinstance(desired_size, tuple):
+        ratio = [float(desired_size[i]/old_size[i]) for i in range(2)]
+        ratio = min(ratio)
+    else:
+        ratio = float(desired_size) / max(old_size)
+        desired_size = tuple([desired_size for i in range(2)])
     new_size = tuple([int(x * ratio) for x in old_size])
+    coord = tuple([(desired_size[i] - new_size[i]) // 2 for i in range(2)])
     # use thumbnail() or resize() method to resize the input image
 
     # thumbnail is a in-place operation
@@ -47,9 +55,8 @@ def resize_keep_aspect(path: str, desired_size: int, out_folder: str):
     im = im.resize(new_size, Image.ANTIALIAS)
     # create a new image and paste the resized on it
 
-    new_im = Image.new("RGB", (desired_size, desired_size))
-    new_im.paste(im, ((desired_size - new_size[0]) // 2,
-                      (desired_size - new_size[1]) // 2))
+    new_im = Image.new("RGB", desired_size)
+    new_im.paste(im, coord)
 
     new_im.save(os.path.join(out_folder, os.path.basename(path)))
     new_im.close()
