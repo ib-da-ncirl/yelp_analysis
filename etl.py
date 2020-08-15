@@ -43,7 +43,7 @@ from PIL import Image
 from pathlib import Path
 from collections import namedtuple
 
-from misc import resize_keep_aspect
+from misc import resize_keep_aspect, decode_int_or_tuple
 
 MIN_PYTHON = (3, 6)
 if sys.version_info < MIN_PYTHON:
@@ -1020,14 +1020,9 @@ if __name__ == "__main__":
            ('photo_size' not in args and len(args.photo_folder_resize)):
             arg_error(parser, f"Options -pfr/--photo_folder_resize and -ps/--photo_size are both required")
         if 'photo_size' in args and len(args.photo_folder_resize):
-            if ',' in args.photo_size:
-                # different desired width & height
-                size_split = args.photo_size.split(',')
-                if len(size_split) != 2:
-                    arg_error(parser, f"Invalid -ps/--photo_size option")
-                photo_size = tuple([int(x) for x in size_split])
-            else:
-                photo_size = int(args.photo_size)
+            photo_size = decode_int_or_tuple(args.photo_size)
+            if photo_size is None:
+                arg_error(parser, f"Invalid -ps/--photo_size option")
             kwarg_dict['photo_size'] = photo_size
             kwarg_dict['photo_folder_resize'] = paths['photo_folder_resize']
     if 'random_select' in args or 'select_on' in args:

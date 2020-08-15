@@ -21,6 +21,7 @@
 #
 import string
 from collections import namedtuple
+from typing import Union
 
 
 def less_dangerous_eval(equation):
@@ -49,3 +50,14 @@ def default_or_val(param: ArgOptParam, dictionary: dict):
     :return:
     """
     return param.default if param.name not in dictionary else dictionary[param.name]
+
+
+def decode_int_or_tuple(arg, tuple_size=2) -> Union[int, tuple, None]:
+    result = None
+    if ',' in arg:
+        arg_split = arg.split(',')
+        if len(arg_split) == tuple_size:
+            result = tuple([int(x) for x in arg_split])
+    else:
+        result = int(arg)
+    return result

@@ -19,9 +19,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .misc import less_dangerous_eval, ArgOptParam, default_or_val
+from .misc import less_dangerous_eval, ArgOptParam, default_or_val, decode_int_or_tuple
 from .misc_tf import pick_device, restrict_gpu_mem, get_optimiser, get_loss, predict, probability_to_class, \
-    predict_img, get_conv2d, get_dense
+    predict_img, get_conv2d, get_dense, get_pooling, get_dropout
 from .arg_ctrl import ArgCtrl
 from .image import resize_keep_aspect
 
@@ -29,6 +29,7 @@ __all__ = [
     'less_dangerous_eval',
     'ArgOptParam',
     'default_or_val',
+    'decode_int_or_tuple',
     'pick_device',
     'restrict_gpu_mem',
     'get_optimiser',
@@ -38,6 +39,8 @@ __all__ = [
     'predict_img',
     'get_conv2d',
     'get_dense',
+    'get_pooling',
+    'get_dropout',
     'ArgCtrl',
     'resize_keep_aspect',
 ]

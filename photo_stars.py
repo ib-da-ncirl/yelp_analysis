@@ -63,9 +63,11 @@ BEST_MODEL_FOLDER = 'best_model'
 LAYER_PARAMS = ['dropout_1', 'dropout_2',
                 'dense_1', 'dense_2',
                 'conv2D_1', 'conv2D_2', 'conv2D_3',
+                'pooling_1',
                 'log_activation',
                 'run1_optimizer', 'run2_optimizer',
-                'run1_loss', 'run2_loss', 'run2_inceptions_to_train', 'run2_train_bn']
+                'run1_loss', 'run2_loss',
+                'run2_inceptions_to_train', 'run2_train_bn']
 
 DO_EX_DEMO = ['do_training', 'do_prediction', 'do_kerastuning']     # do options excluding demo
 APP_LEVEL_CFGS = ['model_path', 'hyper_model_function', 'max_trials', 'executions_per_trial']
@@ -549,6 +551,7 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
             model = keras.models.load_model(model_path)
 
             if class_mode is None:
+                # TODO best_model's need class indices from normal model, need to detect this
                 filepath = os.path.join(app_cfg['model_path'], CLASS_INDICES_FILENAME)
                 if os.path.exists(filepath):
                     class_mode = 'categorical'
@@ -608,13 +611,30 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
             if class_mode == 'categorical':
                 predict_half_stars = np.array([int(pred[0].class_spec['stars'] * 2) for pred in results], dtype=int)
             else:
-                predict_half_stars = np.sum(np.round(results).astype(int), axis=1) + 1
+                predict_half_stars = np.sum(np.round(results).astype(int), axis=1) + 1  # +1 as starts at 1 star TODO use min
 
-            print('Confusion Matrix')
-            print(metrics.confusion_matrix(actual_half_stars, predict_half_stars, normalize='true'))
+            star_list = [f"{val['stars']:.1f}" for val in model_classes.values()]
+            print(f"Model star range: {', '.join(star_list)}")
 
-            print('Accuracy Score')
+            if 'confusion_matrix' in run_cfg.keys():
+                kwargs = run_cfg['confusion_matrix'].copy()
+                if 'normalize' in kwargs and kwargs['normalize'] == 'none':
+                    kwargs['normalize'] = None
+
+
+            print(f"Verification sample: min star {dataset_df['stars'].min()}, max star {dataset_df['stars'].max()}")
+            print(f"Predictions: min star {predict_half_stars.min()/2}, max star {predict_half_stars.max()/2}")
+
+            print("Confusion Matrix")
+            star_list = [f'{x/2:.1f}' for x in range(predict_half_stars.min(), actual_half_stars.max() + 1)]
+            print(f"Stars: {', '.join(star_list)}")
+            print(metrics.confusion_matrix(actual_half_stars, predict_half_stars, **kwargs))
+
+            print("Accuracy Score")
             print(metrics.accuracy_score(actual_half_stars, predict_half_stars))
+
+            print('Classification Report')
+            print(metrics.classification_report(actual_half_stars, predict_half_stars))
 
         else:
             # A DataFrameIterator yields tuples of (x, y) where x is a numpy array containing a batch of images with

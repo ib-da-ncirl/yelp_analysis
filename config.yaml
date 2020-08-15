@@ -32,7 +32,9 @@ run_model: fashion_1
 #  - tf_image_eg_hflip
 #  - inception_v3_eg_hflip_cat_v2
 
-model_path: ./results/tf_image_eg_hflip/200810_1740/tf_image_tl
+#model_path: ./results/inception_v3_eg_hflip_cat_v2/200815_2141/best_model
+model_path: ./results/tf_image_eg_hflip/200815_1707/best_model
+#model_path: ./results/tf_image_eg_hflip/200810_1740/tf_image_tl
 #model_path: ./results/inception_v3_eg_hflip_ord_v2/200810_1309/inception_v3_tl
 
 # -----------------------------------------------------------------------------------------------------------------
@@ -41,9 +43,9 @@ model_path: ./results/tf_image_eg_hflip/200810_1740/tf_image_tl
 # TODO make configuration easier
 # -----------------------------------------------------------------------------------------------------------------
 
-do_training: false
+do_training: true
 do_prediction: false
-do_kerastuning: true
+do_kerastuning: false
 
 hyper_model_function: fashion1_tuning
 max_trials: 3
@@ -84,8 +86,8 @@ defaults:
   # NOTE: Do not include any image augmentation settings in the default section!
 
   # path to the photo dataset csv file
-  dataset_path: ../project/dataset/photo_dataset_photo20.csv
-#  dataset_path: ../project/dataset/photo_dataset.csv
+#  dataset_path: ../project/dataset/photo_dataset_photo20.csv
+  dataset_path: ../project/dataset/photo_dataset.csv
   # specify the limit for the number of photos;
   photo_limit: none
   # number of target classes
@@ -140,6 +142,11 @@ defaults:
   save_val_loss: true
   save_summary: true
   save_model: true
+
+  confusion_matrix:
+    # Normalizes confusion matrix over the true (rows), predicted (columns) conditions or all the population.
+    # If None, confusion matrix will not be normalized.
+    normalize : none
 
 
 # Layer parameters
@@ -218,7 +225,7 @@ models:
       name: categorical_crossentropy
       from_logits: true
 
-    epochs: 15
+    epochs: 25
 
   - name: tf_image_eg_hflip
     desc: TensorFlow Image Classification Tutorial (Augmentation)
@@ -268,6 +275,33 @@ models:
     desc: Basic model
     function: fashion_1
 
+    conv2D_1:
+      filters: 16
+      kernel: 3
+      padding: same
+      activation: relu
+
+    pooling_1:
+      # pool_size: integer or tuple of 2 integers window size over which to take the maximum. `2,2` will take the max value over a 2x2 pooling window.
+      #            If only one integer is specified, the same window length will be used for both dimensions.
+      pool_size: 2
+
+    dropout_1:
+      rate: 0.5
+
+    dense_1:
+      units: 192
+      activation: relu
+
+    log_activation: softmax
+
+    # training run 1 optimizer, see 'Optimiser functions' above
+    run1_optimizer: adam
+
+    # training run 1 loss; see 'Loss functions' above
+    run1_loss:
+      name: categorical_crossentropy
+      from_logits: true
 
     # InceptionV3
     # -----------
@@ -312,7 +346,7 @@ models:
     # function from models package to call
     function: inception_v3_eg_v2
 
-    epochs: 15
+    epochs: 25
 
     # column in photo dataset csv file that contains the target data
     y_col: stars_cat  # categorical representation; e.g. '1_0' represents 1.0 stars

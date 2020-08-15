@@ -33,7 +33,7 @@ from numpy.core.multiarray import ndarray
 from tensorflow.keras.optimizers import Adadelta, Adagrad, Adam, Adamax, Ftrl, Nadam, RMSprop, SGD
 from tensorflow.python.client import device_lib
 from tensorflow.python.keras.callbacks import ProgbarLogger
-from tensorflow.python.keras.layers import Conv2D, Dense
+from tensorflow.python.keras.layers import Conv2D, Dense, Dropout, MaxPooling2D
 from tensorflow.python.keras.losses import BinaryCrossentropy, CategoricalCrossentropy, SparseCategoricalCrossentropy, \
     MeanSquaredError
 from tensorflow.python.keras.models import Model
@@ -42,6 +42,8 @@ from keras.preprocessing.image import load_img
 from keras.preprocessing.image import img_to_array
 from keras.applications.inception_v3 import preprocess_input as inception_v3_preprocess_input
 from keras.applications.resnet50 import preprocess_input as resnet50_preprocess_input
+
+from misc import decode_int_or_tuple
 
 DeviceDetail = namedtuple('DeviceDetail', ['name', 'type', 'num', 'mem'])
 
@@ -211,18 +213,48 @@ def get_loss(setting: Union[str, dict]):
     return loss
 
 
+def args_ex(args, ex_list=None):
+    if ex_list is None:
+        ex_list = []
+    return {key: val for key, val in args.items() if key not in ex_list}
+
+
 def get_conv2d(args, input_shape=None):
     # filters and kernel are positional args
-    kwargs = {key: val for key, val in args.items() if key not in ['filters', 'kernel']}
+    kwargs = args_ex(args, ex_list=['filters', 'kernel'])
     if input_shape is not None:
         kwargs['input_shape'] = input_shape
     return Conv2D(args['filters'], args['kernel'], **kwargs)
 
 
 def get_dense(args):
-    # units is positional args
-    kwargs = {key: val for key, val in args.items() if key not in ['units']}
+    # units is positional arg
+    kwargs = args_ex(args, ex_list=['units'])
     return Dense(args['units'], **kwargs)
+
+
+def get_dropout(args):
+    # rate is positional arg
+    kwargs = args_ex(args, ex_list=['rate'])
+    return Dropout(args['rate'], **kwargs)
+
+
+def get_pooling(args):
+    # pool_size is positional arg
+    kwargs = args_ex(args, ex_list=['pool_size'])
+    if 'pool_size' in args.keys():
+        if isinstance(args['pool_size'], str):
+            pool_size = decode_int_or_tuple(args['pool_size'])
+        elif isinstance(args['pool_size'], int):
+            pool_size = (args['pool_size'], args['pool_size'])
+        else:
+            pool_size = None
+        if pool_size is None:
+            print(f"Warning: Ignoring invalid 'pool_size' argument: {args['pool_size']}")
+    else:
+        pool_size = (2, 2)  # default from code
+
+    return MaxPooling2D(pool_size, **kwargs)
 
 
 def predict(photo_path: str, photo_file: str, target_size: tuple, model: Model, class_indices: dict, top=1):
