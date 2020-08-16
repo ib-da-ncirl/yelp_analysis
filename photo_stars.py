@@ -449,6 +449,20 @@ def do_train(app_cfg: dict, base_cfg: dict, start: float, timestamp: datetime):
             train_val_df = dataset_df
             verify_df = None
 
+        split = int(len(train_val_df) - (len(train_val_df) * run_cfg['validation_split']))
+        train_freq = pd.crosstab(train_val_df.loc[:split - 1, :]['stars'], columns='count')
+        train_freq['percent'] = train_freq['count'] / train_freq['count'].sum()
+        val_freq = pd.crosstab(train_val_df.loc[split:, :]['stars'], columns='count')
+        val_freq['percent'] = val_freq['count'] / val_freq['count'].sum()
+        total_freq = pd.crosstab(train_val_df['stars'], columns='count')
+        total_freq['percent'] = total_freq['count'] / total_freq['count'].sum()
+        print("Training data")
+        print(train_freq)
+        print("Validation data")
+        print(val_freq)
+        print("Training-Validation validation")
+        print(total_freq)
+
         # Data preparation
         # https://keras.io/api/preprocessing/image/#imagedatagenerator-class
         train_image_generator, image_generator_args, common_args, input_shape, input_tensor = \
@@ -607,6 +621,11 @@ def do_predict(app_cfg: dict, base_cfg: dict, model: Model = None, ord_cols: lis
             results = probability_to_class(predictions, classes=model_classes)
 
             actual_half_stars = (dataset_df['stars'] * 2).astype(int).values
+
+            ver_freq = pd.crosstab(dataset_df['stars'], columns='count')
+            ver_freq['percent'] = ver_freq['count'] / ver_freq['count'].sum()
+            print("Prediction data")
+            print(ver_freq)
 
             if class_mode == 'categorical':
                 predict_half_stars = np.array([int(pred[0].class_spec['stars'] * 2) for pred in results], dtype=int)

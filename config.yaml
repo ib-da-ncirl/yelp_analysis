@@ -33,7 +33,8 @@ run_model: fashion_1
 #  - inception_v3_eg_hflip_cat_v2
 
 #model_path: ./results/inception_v3_eg_hflip_cat_v2/200815_2141/best_model
-model_path: ./results/tf_image_eg_hflip/200815_1707/best_model
+#model_path: ./results/tf_image_eg_hflip/200815_1707/best_model
+model_path: ./results/fashion_1/200816_0730/best_model
 #model_path: ./results/tf_image_eg_hflip/200810_1740/tf_image_tl
 #model_path: ./results/inception_v3_eg_hflip_ord_v2/200810_1309/inception_v3_tl
 
@@ -275,33 +276,45 @@ models:
     desc: Basic model
     function: fashion_1
 
+    # from hyperparameters identified by tuning
+
     conv2D_1:
-      filters: 16
-      kernel: 3
+      # hyperparam 'conv_filters'
+      filters: 48
+      # hyperparam 'conv_kernel'
+      kernel: 4
       padding: same
-      activation: relu
+      # hyperparam 'conv_activation'
+      activation: softmax
 
     pooling_1:
       # pool_size: integer or tuple of 2 integers window size over which to take the maximum. `2,2` will take the max value over a 2x2 pooling window.
       #            If only one integer is specified, the same window length will be used for both dimensions.
-      pool_size: 2
+      # hyperparam 'pool_filters'
+      pool_size: 4
 
     dropout_1:
-      rate: 0.5
+      # hyperparam 'drop_rate'
+      rate: 0.3
 
     dense_1:
+      # hyperparam 'dense_units'
       units: 192
-      activation: relu
+      # hyperparam 'dense_activation'
+      activation: softmax
 
     log_activation: softmax
 
     # training run 1 optimizer, see 'Optimiser functions' above
-    run1_optimizer: adam
+    run1_optimizer:
+      name: adam
+      # hyperparam 'learning_rate'
+      learning_rate: 0.0001
 
     # training run 1 loss; see 'Loss functions' above
     run1_loss:
       name: categorical_crossentropy
-      from_logits: true
+#      from_logits: true
 
     # InceptionV3
     # -----------

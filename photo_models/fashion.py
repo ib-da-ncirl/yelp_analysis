@@ -81,19 +81,19 @@ class Fashion1HyperModel(hm.HyperModel):
     def build(self, hp):
         model = Sequential()
 
-        model.add(Conv2D(filters=hp.Int('conv_filters', 16, 64, 8),
+        model.add(Conv2D(filters=hp.Int('conv_filters', 16, 64, 16),
                          kernel_size=hp.Int('conv_kernel', 2, 4, 1), padding='same',
                          activation=hp.Choice('conv_activation', ['relu', 'softmax']),
                          input_shape=self.input_shape))
         model.add(MaxPooling2D(pool_size=hp.Int('pool_filters', 2, 4, 1)))
-        model.add(Dropout(rate=hp.Float('drop_rate', 0.1, 0.6, 0.1)))
+        model.add(Dropout(rate=hp.Float('drop_rate', 0.1, 0.5, 0.1)))
         model.add(Flatten())
-        model.add(Dense(units=hp.Int('dense_units', 64, 512, 32),
+        model.add(Dense(units=hp.Int('dense_units', 64, 256, 64),
                         activation=hp.Choice('dense_activation', ['relu', 'softmax'])))
         model.add(Dense(self.class_count, activation='softmax'))
 
         model.compile(
-            optimizer=Adam(hp.Choice('learning_rate', [1e-2, 1e-3, 1e-4])),
+            optimizer=Adam(hp.Choice('learning_rate', [1e-3, 1e-4])),
             loss='categorical_crossentropy',
             metrics=['accuracy'])
         return model
