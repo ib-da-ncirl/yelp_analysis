@@ -1,5 +1,52 @@
 #!/bin/bash
 
+if [[ ! -d "../../processed_data/photos150_100" ]]; then
+  if [[ -f "../../processed_data/photos150_100.zip" ]]; then
+    echo 'photos150_100.zip' located
+    proceed=""
+    while [ -z "$proceed" ]
+    do
+      echo 'photos150_100.zip' needs to be uncompressed to continue. Are you sure you wish to proceed [y/n]?
+      read -r proceed
+      if [[ $proceed != "y" ]] && [[ $proceed != "n" ]]; then
+        proceed=""
+      fi
+    done
+
+    if [[ $proceed == "n" ]]; then
+      exit
+    fi
+    unzip "../../processed_data/photos150_100.zip" -d "../../processed_data"
+  else
+    echo "Unable to locate 'photos150_100'"
+    exit
+  fi
+fi
+if [[ ! -d "../../processed_data/photos299" ]]; then
+  if [[ -f "../../processed_data/photos299.zip" ]]; then
+    echo 'photos299.zip' located
+    proceed=""
+    while [ -z "$proceed" ]
+    do
+      echo 'photos299.zip' needs to be uncompressed to continue. Are you sure you wish to proceed [y/n]?
+      read -r proceed
+      if [[ $proceed != "y" ]] && [[ $proceed != "n" ]]; then
+        proceed=""
+      fi
+    done
+
+    if [[ $proceed == "n" ]]; then
+      exit
+    fi
+    unzip "../../processed_data/photos299.zip" -d "../../processed_data"
+  else
+    echo "Unable to locate 'photos299'"
+    exit
+  fi
+fi
+
+
+
 PS3='Please enter your choice: '
 options=("Training demo" "Prediction demo" "Tuning demo" "Quit")
 select opt in "${options[@]}"
