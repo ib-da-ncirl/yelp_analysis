@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-base_folder="../project/dataset_test"
-#base_folder=""
+base_folder=""
 
 shopt -s nocasematch
 proceed=""
@@ -18,7 +17,6 @@ if [[ $proceed == "n" ]]; then
   exit
 fi
 
-shopt -s nocasematch
 while [ -z "$base_folder" ]
 do
   echo Enter path folder containing \'yelp_dataset.tar\' and \'yelp_photos.tar\'

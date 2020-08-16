@@ -89,8 +89,8 @@ defaults:
   # NOTE: Do not include any image augmentation settings in the default section!
 
   # path to the photo dataset csv file
-#  dataset_path: ../processed_data/photo_dataset_photo20.csv
-  dataset_path: ../processed_data/photo_dataset.csv
+#  dataset_path: ../../processed_data/photo_dataset_photo20.csv
+  dataset_path: ../../processed_data/photo_dataset.csv
   # specify the limit for the number of photos;
   photo_limit: none
   # number of target classes
@@ -100,7 +100,7 @@ defaults:
   epochs: 15
 
   # path to the photos folder
-  photo_path: ../processed_data/photos150_100
+  photo_path: ../../processed_data/photos150_100
   # default image width & height, may be overwritten in model definition by setting 'image_width' & 'image_height'
   # most images are 600px x 400px, so reduce keeping aspect ratio
   image_width: 150
@@ -325,7 +325,7 @@ models:
     # function from models package to call
     function: inception_v3_eg
     # path to the photos folder
-    photo_path: ../processed_data/photos299
+    photo_path: ../../processed_data/photos299
     # original InceptionV3 images were 299px x 299px, so use resized copies keeping aspect ratio
     image_width: 299
     image_height: 299
@@ -458,7 +458,7 @@ models:
     desc: Fine-tune ResNet50 on a new set of classes
     # function from models package to call
     function: resnet50_eg
-    photo_path: ../processed_data/photos224
+    photo_path: ../../processed_data/photos224
     # original ResNet images were 224px x 224px, so use resized copies keeping aspect ratio
     image_width: 224
     image_height: 224
@@ -497,7 +497,7 @@ models:
     desc: Single GP AlexNet
     # function from models package to call
     function: alexnet
-    photo_path: ../processed_data/photos224
+    photo_path: ../../processed_data/photos224
     # original ResNet images were 224px x 224px, so use resized copies keeping aspect ratio
     image_width: 224
     image_height: 224
@@ -522,7 +522,7 @@ models:
     desc: Fine-tune Xception on a new set of classes
     # function from models package to call
     function: xception_eg
-    photo_path: ../processed_data/photos299
+    photo_path: ../../processed_data/photos299
     # original ResNet images were 299px x 299px, so use resized copies keeping aspect ratio
     image_width: 299
     image_height: 299
@@ -558,7 +558,7 @@ models:
     desc: Fine-tune VGG16 on a new set of classes
     # function from models package to call
     function: vgg16_eg
-    photo_path: ../processed_data/photos224
+    photo_path: ../../processed_data/photos224
     # original ResNet images were 224px x 224px, so use resized copies keeping aspect ratio
     image_width: 224
     image_height: 224
